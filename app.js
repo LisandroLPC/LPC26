@@ -365,7 +365,8 @@ function rProd(){
   </div>
 
   <div class="sh">Producción de hoy</div>
-  ${lotRows}`;
+  ${lotRows}
+  ${rInsumosSection()}`;
 }
 
 function onLiTipo(){
@@ -490,10 +491,6 @@ function rInsumosSection(){
     <table><thead><tr><th>Insumo</th><th>Costo $</th><th>Unidad</th><th></th></tr></thead><tbody>${rows}</tbody></table>
   </div>`;
 }
-
-// patch rProd to include insumos section
-const _rProdBase=rProd;
-function rProd(){return _rProdBase()+rInsumosSection();}
 
 async function addIns(){const n=document.getElementById('ins-n')?.value.trim(),u=document.getElementById('ins-u')?.value,c=parseFloat(document.getElementById('ins-c')?.value)||0;if(!n||!c)return alert('Completá nombre y costo');if(S.ins.find(i=>i.name===n))return alert('Ya existe');const row={id:uid(),name:n,unit:u,costUnit:c,cost_unit:c};S.ins.push(row);save();render();if(online){try{await sbUp('insumos',{id:row.id,name:row.name,unit:row.unit,cost_unit:row.costUnit});sync('ok','guardado')}catch(e){sync('err','error')}}}
 async function updIns(id,v){const i=S.ins.find(x=>x.id===id);if(!i)return;i.costUnit=parseFloat(v)||0;i.cost_unit=i.costUnit;save();toast('Costo actualizado ✓');if(online){try{await sbUp('insumos',{id:i.id,name:i.name,unit:i.unit,cost_unit:i.costUnit});sync('ok','guardado')}catch(e){sync('err','error')}}}

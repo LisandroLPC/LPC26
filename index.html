@@ -9,36 +9,66 @@
 <title>Los Pollos Cuñados</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div class="shell">
-  <div class="topbar">
-    <div class="tl">
-      <h1>🐔 Los Pollos Cuñados</h1>
-      <div class="sub" id="hdr-sub"></div>
+
+<!-- LOGIN SCREEN -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">🐔</div>
+    <div class="login-title">Los Pollos Cuñados</div>
+    <div class="login-sub">Ingresá tu PIN</div>
+    <div class="login-user-sel">
+      <button class="usel-btn active" id="usel-dueno" onclick="selUser('dueno')">Dueño</button>
+      <button class="usel-btn" id="usel-empleado" onclick="selUser('empleado')">Empleado</button>
     </div>
-    <div class="tr">
-      <div class="spill">
-        <div class="sdot" id="sdot"></div>
-        <span class="slbl" id="slbl">–</span>
-      </div>
-      <div class="dnav">
-        <button class="nb" onclick="chDay(-1)">‹</button>
-        <div class="dnd" id="dnd"></div>
-        <button class="nb" onclick="chDay(1)">›</button>
-      </div>
+    <div class="pin-display" id="pin-display">····</div>
+    <div class="pin-pad">
+      <button class="pin-btn" onclick="pinPress('1')">1</button>
+      <button class="pin-btn" onclick="pinPress('2')">2</button>
+      <button class="pin-btn" onclick="pinPress('3')">3</button>
+      <button class="pin-btn" onclick="pinPress('4')">4</button>
+      <button class="pin-btn" onclick="pinPress('5')">5</button>
+      <button class="pin-btn" onclick="pinPress('6')">6</button>
+      <button class="pin-btn" onclick="pinPress('7')">7</button>
+      <button class="pin-btn" onclick="pinPress('8')">8</button>
+      <button class="pin-btn" onclick="pinPress('9')">9</button>
+      <button class="pin-btn pin-clear" onclick="pinClear()">✕</button>
+      <button class="pin-btn" onclick="pinPress('0')">0</button>
+      <button class="pin-btn pin-ok" onclick="pinOk()">✓</button>
     </div>
+    <div class="pin-error" id="pin-error"></div>
   </div>
-  <div class="content" id="content"></div>
-  <nav class="bn">
-    <div class="bni active" id="bn-caja" onclick="go('caja')"><div class="bi">💰</div><div class="bl">Caja</div></div>
-    <div class="bni" id="bn-stock" onclick="go('stock')"><div class="bi">📦</div><div class="bl">Stock</div></div>
-    <div class="bni" id="bn-prod" onclick="go('prod')"><div class="bi">🔪</div><div class="bl">Producción</div></div>
-    <div class="bni" id="bn-gastos" onclick="go('gastos')"><div class="bi">🧾</div><div class="bl">Gastos</div></div>
-    <div class="bni" id="bn-reportes" onclick="go('reportes')"><div class="bi">📊</div><div class="bl">Reportes</div></div>
-  </nav>
 </div>
+
+<!-- MAIN APP -->
+<div id="app-screen" style="display:none">
+  <div class="shell">
+    <div class="topbar">
+      <div class="tl">
+        <h1>🐔 Los Pollos Cuñados</h1>
+        <div class="sub" id="hdr-sub"></div>
+      </div>
+      <div class="tr">
+        <div class="spill">
+          <div class="sdot" id="sdot"></div>
+          <span class="slbl" id="slbl">–</span>
+        </div>
+        <div class="dnav">
+          <button class="nb" onclick="chDay(-1)">‹</button>
+          <div class="dnd" id="dnd"></div>
+          <button class="nb" onclick="chDay(1)">›</button>
+        </div>
+        <button class="nb" onclick="doLogout()" title="Cerrar sesión" style="font-size:11px;width:auto;padding:0 6px">salir</button>
+      </div>
+    </div>
+    <div class="content" id="content"></div>
+    <nav class="bn" id="bottom-nav"></nav>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 <script src="app.js"></script>
 </body>

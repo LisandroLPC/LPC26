@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0f0f0f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Los Pollos Cuñados">
+<title>Los Pollos Cuñados</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="shell">
+  <div class="topbar">
+    <div class="tl">
+      <h1>🐔 Los Pollos Cuñados</h1>
+      <div class="sub" id="hdr-sub"></div>
+    </div>
+    <div class="tr">
+      <div class="spill">
+        <div class="sdot" id="sdot"></div>
+        <span class="slbl" id="slbl">–</span>
+      </div>
+      <div class="dnav">
+        <button class="nb" onclick="chDay(-1)">‹</button>
+        <div class="dnd" id="dnd"></div>
+        <button class="nb" onclick="chDay(1)">›</button>
+      </div>
+    </div>
+  </div>
+  <div class="content" id="content"></div>
+  <nav class="bn">
+    <div class="bni active" id="bn-caja" onclick="go('caja')"><div class="bi">💰</div><div class="bl">Caja</div></div>
+    <div class="bni" id="bn-stock" onclick="go('stock')"><div class="bi">📦</div><div class="bl">Stock</div></div>
+    <div class="bni" id="bn-prod" onclick="go('prod')"><div class="bi">🔪</div><div class="bl">Producción</div></div>
+    <div class="bni" id="bn-gastos" onclick="go('gastos')"><div class="bi">🧾</div><div class="bl">Gastos</div></div>
+    <div class="bni" id="bn-reportes" onclick="go('reportes')"><div class="bi">📊</div><div class="bl">Reportes</div></div>
+  </nav>
+</div>
+<div class="toast" id="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>

@@ -114,3 +114,16 @@ tr:hover td{background:rgba(255,255,255,.012)}
 .info-box{background:rgba(96,165,250,.07);border:1px solid rgba(96,165,250,.2);border-radius:var(--r);padding:9px 12px;font-size:10px;font-family:var(--mo);color:var(--bl);margin-bottom:10px}
 .compra-item{background:var(--sf2);border:1px solid var(--br);border-radius:6px;padding:8px 10px;margin-bottom:6px}
 .rol-badge{font-size:9px;font-family:var(--mo);padding:2px 7px;border-radius:10px;background:rgba(192,132,252,.12);color:var(--pu);border:1px solid rgba(192,132,252,.2)}
+
+/* V5 additions */
+.prod-tabs{display:flex;gap:6px;margin-bottom:12px}
+.prod-tab{flex:1;padding:8px;border-radius:6px;border:1px solid var(--br2);background:none;color:var(--tx3);font-family:var(--sa);font-size:12px;font-weight:600;cursor:pointer;text-align:center;transition:all .15s}
+.prod-tab.active{background:var(--ac);color:#0f0f0f;border-color:var(--ac)}
+.info-box{background:rgba(96,165,250,.07);border:1px solid rgba(96,165,250,.2);border-radius:var(--r);padding:9px 12px;font-size:10px;font-family:var(--mo);color:var(--bl);margin-bottom:10px}
+.info-box.green{background:rgba(74,222,128,.07);border-color:rgba(74,222,128,.2);color:var(--gn)}
+.info-box.amber{background:rgba(232,197,71,.07);border-color:rgba(232,197,71,.2);color:var(--ac)}
+.compra-item{background:var(--sf2);border:1px solid var(--br);border-radius:6px;padding:8px 10px;margin-bottom:6px}
+.lote-card{background:var(--sf);border:1px solid var(--br);border-radius:var(--r);padding:10px 12px;margin-bottom:8px}
+.lote-card-header{display:flex;justify-content:space-between;align-items:flex-start}
+.lote-card-items{margin-top:5px;border-top:1px solid var(--br);padding-top:5px}
+.pago-row{display:flex;gap:6px;align-items:flex-end}

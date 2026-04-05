@@ -71,7 +71,7 @@ function updatePD(){const el=document.getElementById('pin-display');if(el)el.tex
 async function pinOk(){
   if(!pinBuf){document.getElementById('pin-error').textContent='Ingresá tu PIN';return;}
   let usr=S.us.find(u=>u.rol===loginRol&&u.pin===pinBuf&&u.activo!==false);
-  if(!usr){if(loginRol==='dueno'&&pinBuf==='1234')usr={id:'usr_dueno',nombre:'Dueño',rol:'dueno'};else if(loginRol==='empleado'&&pinBuf==='0000')usr={id:'usr_empleado',nombre:'Empleado',rol:'empleado'};}
+  if(!usr){if(loginRol==='dueno'&&pinBuf==='1408')usr={id:'usr_dueno',nombre:'Licha',rol:'dueno'};else if(loginRol==='empleado'&&pinBuf==='0000')usr={id:'usr_empleado',nombre:'Empleado',rol:'empleado'};}
   if(!usr){document.getElementById('pin-error').textContent='PIN incorrecto';pinBuf='';updatePD();return;}
   sesion={id:usr.id,nombre:usr.nombre,rol:usr.rol};LC.s('sesion',sesion);
   document.getElementById('login-screen').style.display='none';
@@ -304,7 +304,6 @@ function rStock(){
     <tbody>${sgRows('venta')}</tbody></table>
   </div>
   <div class="sh">Variantes de venta</div>
-  <div class="blk"><div class="bt">Nueva variante</div>
     <div class="fr">
       <div class="fl"><label>Grupo</label><select id="vr-g">${grOptV||'<option>Sin grupos</option>'}</select></div>
       <div class="fl" style="flex:2"><label>Nombre</label><input type="text" id="vr-n" placeholder="Ej: Cuarto x kg, Oferta 3kg, Pata..."></div>
@@ -319,23 +318,7 @@ function rStock(){
     <table><thead><tr><th>Variante</th><th>Descuenta</th><th>Precio $</th><th></th></tr></thead>
     <tbody>${vrRows||`<tr><td colspan="4" class="empty-row">Sin variantes</td></tr>`}</tbody>
   </div>
-  <div class="sh">Stock de producción (materias primas)</div>
-  <div class="info-box amber">El costo/unidad se actualiza automáticamente desde Compras. También podés editarlo directo acá.</div>
-  <div class="blk"><div class="bt">Nuevo ítem de producción</div>
-    <div class="fr">
-      <div class="fl" style="flex:2"><label>Nombre</label><input type="text" id="sgp-n" placeholder="Ej: Pollo entero para producción..."></div>
-      <div class="fl" style="max-width:90px"><label>Unidad</label><select id="sgp-u">${uOpts}</select></div>
-    </div>
-    <div class="fr">
-      <div class="fl" style="max-width:80px"><label>Stock inicial</label><input type="number" id="sgp-s" placeholder="0" step="0.1"></div>
-      <div class="fl"><label>Costo/unidad $</label><input type="number" id="sgp-c" placeholder="0" step="0.01"></div>
-      <button class="btn btnp" onclick="addG('produccion')" style="align-self:flex-end">+ Crear</button>
-    </div>
-  </div>
-  <div class="tbk"><div class="tt">Stock producción — costo/u se actualiza desde Compras</div>
-    <table><thead><tr><th>Materia prima</th><th>Stock</th><th>Ajustar</th><th>Costo/u</th><th></th></tr></thead>
-    <tbody>${sgRows('produccion')}</tbody>
-  </div>`;
+  `;
 }
 
 async function addG(tipo){
@@ -591,33 +574,46 @@ async function delIns(id){S.ins=S.ins.filter(x=>x.id!==id);save();render();if(on
 ══════════════════════════════════════════ */
 function rCompras(){
   const todC=S.co.filter(c=>c.day===day);
-  const sgPOpts=sgP().map(g=>`<option value="sg_${g.id}" data-u="${g.unit||'kg'}">${esc(g.name)} (${g.unit||'kg'})</option>`).join('');
+
+  // Selector: grupos de venta + insumos (sin stock de producción que ya no se usa)
+  const sgVOpts=sgV().map(g=>`<option value="sgv_${g.id}" data-u="${g.unit||'kg'}">${esc(g.name)} (${g.unit||'kg'})</option>`).join('');
   const insOpts=S.ins.map(i=>`<option value="ins_${i.id}" data-u="${i.unit}">${esc(i.name)} (${i.unit})</option>`).join('');
-  const allOpts=`<optgroup label="Stock de producción">${sgPOpts||'<option disabled>Sin stock prod.</option>'}</optgroup><optgroup label="Insumos">${insOpts||'<option disabled>Sin insumos</option>'}</optgroup>`;
+  const allOpts=`<optgroup label="Stock de venta (actualiza costo/kg)">${sgVOpts||'<option disabled>Sin grupos — creá en Stock</option>'}</optgroup><optgroup label="Insumos">${insOpts||'<option disabled>Sin insumos — creá en Producción</option>'}</optgroup>`;
+
+  // Checkboxes para propagar costo/kg a grupos de venta
+  const propagaOpts=sgV().map(g=>`
+    <label style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:11px;cursor:pointer">
+      <input type="checkbox" id="prop_${g.id}" value="${g.id}" style="width:auto;accent-color:var(--ac)">
+      ${esc(g.name)} (${g.unit||'kg'})
+    </label>`).join('');
 
   const comprasCards=todC.length?todC.map(c=>{
     const items=S.coi.filter(i=>i.compra_id===c.id);
     const pagoInfo=[];
     if(c.pago_efectivo>0)pagoInfo.push(`Ef: ${$m(c.pago_efectivo)}`);
     if(c.pago_transferencia>0)pagoInfo.push(`Tr: ${$m(c.pago_transferencia)}`);
+    // parse propagated groups from note field
+    const propGroups=c.grupos_propagados?JSON.parse(c.grupos_propagados):[];
+    const propNames=propGroups.map(id=>{const g=S.sg.find(x=>x.id===id);return g?g.name:''}).filter(Boolean);
     return`<div class="lote-card">
       <div class="lote-card-header">
         <div><div style="font-size:13px;font-weight:600">${esc(c.proveedor)}</div>
           <div style="font-size:10px;color:var(--tx3);font-family:var(--mo)">${c.time||''}${c.nro_factura?' · F/'+esc(c.nro_factura):''}</div>
           ${pagoInfo.length?`<div style="font-size:10px;color:var(--tx2);font-family:var(--mo)">${pagoInfo.join(' + ')}</div>`:''}
+          ${propNames.length?`<div style="font-size:10px;color:var(--ac);font-family:var(--mo)">Costo propagado a: ${propNames.join(', ')}</div>`:''}
         </div>
         <div style="text-align:right">
           <div style="font-size:13px;font-family:var(--mo);color:var(--ac)">${$m(c.total)}</div>
           <button class="dbtn" onclick="delCompra('${c.id}')" style="margin-top:3px">✕</button>
         </div>
       </div>
-      ${items.length?`<div class="lote-card-items">${items.map(i=>`<div style="font-size:10px;color:var(--tx2);padding:2px 0">${esc(i.descripcion)}: ${i.qty_compra} ${i.unit_compra||''} ${i.qty_real?'→ '+fQ(i.qty_real,i.unit_real):''} — ${$m(i.precio_total)}${i.cost_unit_calculado?' ('+$d2(i.cost_unit_calculado)+'/'+i.unit_real+')':''}</div>`).join('')}</div>`:''}
+      ${items.length?`<div class="lote-card-items">${items.map(i=>`<div style="font-size:10px;color:var(--tx2);padding:2px 0">${esc(i.descripcion)}: ${i.qty_compra} ${i.unit_compra||''} ${i.qty_real?'→ '+fQ(i.qty_real,i.unit_real):''} — ${$m(i.precio_total)}${i.cost_unit_calculado?' (costo: '+$d2(i.cost_unit_calculado)+'/'+i.unit_real+')':''}</div>`).join('')}</div>`:''}
       ${c.note?`<div style="font-size:10px;color:var(--tx3);margin-top:3px">${esc(c.note)}</div>`:''}
     </div>`;
   }).join(''):`<div class="empty-row">Sin compras hoy</div>`;
 
   return`
-  <div class="info-box">🛒 Al guardar: actualiza stock de producción, costos/kg y registra automáticamente el gasto del día.</div>
+  <div class="info-box">🛒 Al guardar: calcula el costo/kg, lo propaga a los grupos de stock que elijas, y registra el total como gasto del día.</div>
   <div class="sh">Nueva factura de proveedor</div>
   <div class="blk"><div class="bt">Datos de la factura</div>
     <div class="fr">
@@ -627,13 +623,14 @@ function rCompras(){
     <div class="fr">
       <div class="fl"><label>Nota</label><input type="text" id="cp-note" placeholder=""></div>
     </div>
-    <div style="font-size:9px;color:var(--tx2);font-family:var(--mo);margin-bottom:6px;margin-top:4px">FORMA DE PAGO (podés combinar efectivo + transferencia)</div>
+    <div style="font-size:9px;color:var(--tx2);font-family:var(--mo);margin-bottom:6px;margin-top:6px">FORMA DE PAGO</div>
     <div class="fr">
       <div class="fl"><label>Efectivo $</label><input type="number" id="cp-ef" placeholder="0" oninput="calcCpTotal()"></div>
       <div class="fl"><label>Transferencia $</label><input type="number" id="cp-tr" placeholder="0" oninput="calcCpTotal()"></div>
       <div class="fl"><label>Total factura</label><input type="text" id="cp-tot" readonly style="color:var(--ac)"></div>
     </div>
   </div>
+
   <div class="blk"><div class="bt">Artículos de la factura</div>
     <div id="cp-items-list"></div>
     <div class="sep"></div>
@@ -645,13 +642,22 @@ function rCompras(){
     <div class="fr">
       <div class="fl" style="max-width:70px"><label>Cant. compra</label><input type="number" id="ci-qtyc" placeholder="4" min="0.001" step="0.001"></div>
       <div class="fl" style="max-width:90px"><label>Unidad compra</label><input type="text" id="ci-uc" placeholder="cajón, bolsa..."></div>
-      <div class="fl" style="max-width:70px"><label>Cant. real</label><input type="number" id="ci-qtyr" placeholder="74 kg" min="0.001" step="0.001" title="Ej: los kg reales del cajón"></div>
-      <div class="fl" style="max-width:80px"><label>Precio total $</label><input type="number" id="ci-precio" placeholder="0"></div>
+      <div class="fl" style="max-width:70px"><label>Cant. real (kg)</label><input type="number" id="ci-qtyr" placeholder="74" min="0.001" step="0.001"></div>
+      <div class="fl" style="max-width:80px"><label>Precio total $</label><input type="number" id="ci-precio" placeholder="0" oninput="calcCostoUnitario()"></div>
       <button class="btn" onclick="addCompraItem()" style="align-self:flex-end;padding:6px 10px;font-size:11px">+</button>
     </div>
-    <div style="font-size:9px;color:var(--tx3);font-family:var(--mo);margin-top:3px">Cant. real: en la unidad del stock. 4 cajones → 74kg reales → costo/kg = total÷74</div>
-    <button class="btn btnp" onclick="saveCompra()" style="width:100%;margin-top:10px">✓ Guardar factura</button>
+    <div style="font-size:9px;color:var(--tx3);font-family:var(--mo);margin-top:2px" id="costo-preview"></div>
+    <div style="font-size:9px;color:var(--tx3);font-family:var(--mo)">Cant. real = kg reales de la pesada. Ej: 4 cajones → 74kg → costo/kg = total ÷ 74</div>
   </div>
+
+  ${sgV().length?`<div class="blk"><div class="bt">Propagar costo/kg a grupos de stock (informativo)</div>
+    <div style="font-size:10px;color:var(--tx2);font-family:var(--mo);margin-bottom:8px">Marcá los grupos cuyo costo/kg querés actualizar con el de esta compra. No afecta gastos.</div>
+    <div id="prop-grupos">${propagaOpts||'<div style="font-size:11px;color:var(--tx3)">Sin grupos de venta</div>'}</div>
+    <button class="btn" onclick="selAllProp()" style="font-size:11px;padding:4px 10px;margin-top:8px">Seleccionar todos</button>
+  </div>`:''}
+
+  <button class="btn btnp" onclick="saveCompra()" style="width:100%;margin-top:4px">✓ Guardar factura</button>
+
   <div class="sh">Compras de hoy</div>
   ${comprasCards}`;
 }
@@ -659,6 +665,28 @@ function rCompras(){
 function calcCpTotal(){
   const ef=parseFloat(document.getElementById('cp-ef')?.value)||0,tr=parseFloat(document.getElementById('cp-tr')?.value)||0;
   const tot=document.getElementById('cp-tot');if(tot)tot.value=ef+tr>0?$m(ef+tr):'';
+}
+
+function calcCostoUnitario(){
+  const precio=parseFloat(document.getElementById('ci-precio')?.value)||0;
+  const qtyR=parseFloat(document.getElementById('ci-qtyr')?.value)||0;
+  const qtyC=parseFloat(document.getElementById('ci-qtyc')?.value)||0;
+  const prev=document.getElementById('costo-preview');
+  if(!prev)return;
+  if(precio&&(qtyR||qtyC)){
+    const base=qtyR||qtyC;
+    const costo=precio/base;
+    const refEl=document.getElementById('ci-ref');
+    const unit=refEl?.options[refEl.selectedIndex]?.dataset?.u||'kg';
+    prev.textContent=`→ Costo calculado: ${$d2(costo)}/${unit}`;
+    prev.style.color='var(--ac)';
+  } else {
+    prev.textContent='';
+  }
+}
+
+function selAllProp(){
+  sgV().forEach(g=>{const cb=document.getElementById('prop_'+g.id);if(cb)cb.checked=true;});
 }
 
 function renderCompraItems(){
@@ -669,80 +697,124 @@ function renderCompraItems(){
     <div style="display:flex;justify-content:space-between;align-items:flex-start">
       <div><div style="font-size:12px;font-weight:500">${esc(x.descripcion)}</div>
         <div style="font-size:10px;color:var(--tx3);font-family:var(--mo)">${x.qty_compra} ${x.unit_compra||''} ${x.qty_real?'→ '+fQ(x.qty_real,x.unit_real):''}</div>
-        <div style="font-size:10px;color:var(--tx2);font-family:var(--mo)">${$m(x.precio_total)}${x.cost_unit_calculado?' · costo: '+$d2(x.cost_unit_calculado)+'/'+x.unit_real:''}</div>
+        <div style="font-size:10px;color:var(--ac);font-family:var(--mo)">${$m(x.precio_total)} · costo: ${$d2(x.cost_unit_calculado||0)}/${x.unit_real||'kg'}</div>
       </div>
       <button class="dbtn" onclick="rmCompraItem(${i})">✕</button>
     </div>
   </div>`).join('')
-  +`<div style="text-align:right;font-size:12px;font-family:var(--mo);color:var(--ac);padding:5px 0">Artículos: ${$m(tot)}</div>`;
+  +`<div style="text-align:right;font-size:12px;font-family:var(--mo);color:var(--ac);padding:5px 0">Total artículos: ${$m(tot)}</div>`;
 }
 
 function addCompraItem(){
-  const desc=document.getElementById('ci-desc')?.value.trim(),refEl=document.getElementById('ci-ref'),refOpt=refEl?.options[refEl.selectedIndex],refVal=refEl?.value;
-  const qtyC=parseFloat(document.getElementById('ci-qtyc')?.value)||0,uc=document.getElementById('ci-uc')?.value.trim()||'unidad';
-  const qtyR=parseFloat(document.getElementById('ci-qtyr')?.value)||0,precio=parseFloat(document.getElementById('ci-precio')?.value)||0;
+  const desc=document.getElementById('ci-desc')?.value.trim();
+  const refEl=document.getElementById('ci-ref'),refOpt=refEl?.options[refEl.selectedIndex],refVal=refEl?.value;
+  const qtyC=parseFloat(document.getElementById('ci-qtyc')?.value)||0;
+  const uc=document.getElementById('ci-uc')?.value.trim()||'unidad';
+  const qtyR=parseFloat(document.getElementById('ci-qtyr')?.value)||0;
+  const precio=parseFloat(document.getElementById('ci-precio')?.value)||0;
   if(!desc||!qtyC||!precio)return alert('Completá descripción, cantidad y precio');
   const unitReal=refOpt?.dataset?.u||'kg';
-  const costCalc=qtyR>0?precio/qtyR:precio/qtyC;
-  const isStock=refVal?.startsWith('sg_');
-  const ref_id=refVal?.replace(/^(sg_|ins_)/,'');
-  compraItems.push({descripcion:desc,tipo_destino:isStock?'stock_prod':'insumo',ref_id,qty_compra:qtyC,unit_compra:uc,qty_real:qtyR||qtyC,unit_real:unitReal,precio_total:precio,cost_unit_calculado:costCalc});
-  document.getElementById('ci-desc').value='';document.getElementById('ci-qtyc').value='';document.getElementById('ci-qtyr').value='';document.getElementById('ci-precio').value='';
+  const base=qtyR||qtyC;
+  const costCalc=precio/base;
+  const isStock=refVal?.startsWith('sgv_');
+  const isIns=refVal?.startsWith('ins_');
+  const ref_id=refVal?.replace(/^(sgv_|ins_)/,'');
+  compraItems.push({
+    descripcion:desc,
+    tipo_destino:isStock?'stock_venta':isIns?'insumo':'otro',
+    ref_id,qty_compra:qtyC,unit_compra:uc,qty_real:qtyR||qtyC,unit_real:unitReal,
+    precio_total:precio,cost_unit_calculado:costCalc
+  });
+  document.getElementById('ci-desc').value='';
+  document.getElementById('ci-qtyc').value='';
+  document.getElementById('ci-qtyr').value='';
+  document.getElementById('ci-precio').value='';
+  const prev=document.getElementById('costo-preview');if(prev)prev.textContent='';
   renderCompraItems();
 }
 function rmCompraItem(i){compraItems.splice(i,1);renderCompraItems();}
 
 async function saveCompra(){
-  const prov=document.getElementById('cp-prov')?.value.trim(),fact=document.getElementById('cp-fact')?.value.trim(),note=document.getElementById('cp-note')?.value.trim();
-  const ef=parseFloat(document.getElementById('cp-ef')?.value)||0,tr=parseFloat(document.getElementById('cp-tr')?.value)||0;
+  const prov=document.getElementById('cp-prov')?.value.trim();
+  const fact=document.getElementById('cp-fact')?.value.trim();
+  const note=document.getElementById('cp-note')?.value.trim();
+  const ef=parseFloat(document.getElementById('cp-ef')?.value)||0;
+  const tr=parseFloat(document.getElementById('cp-tr')?.value)||0;
   if(!prov)return alert('Ingresá el proveedor');
+  if(!compraItems.length)return alert('Agregá al menos un artículo');
   const totalPago=ef+tr;
   const totalItems=compraItems.reduce((s,x)=>s+x.precio_total,0);
-  if(!totalPago&&!totalItems)return alert('Ingresá el pago o los artículos');
-  if(!compraItems.length)return alert('Agregá al menos un artículo');
   const total=totalPago||totalItems;
+
+  // grupos a los que propagar el costo/kg (checkboxes marcados)
+  const propagarA=sgV().filter(g=>{const cb=document.getElementById('prop_'+g.id);return cb&&cb.checked;}).map(g=>g.id);
+
+  // calcular costo/kg global de esta compra (total ÷ kg reales totales de artículos de pollo)
+  const polloItems=compraItems.filter(x=>x.tipo_destino==='stock_venta'||x.tipo_destino==='insumo');
+  const kgTotales=polloItems.reduce((s,x)=>s+(x.qty_real||x.qty_compra),0);
+  const costoKgGlobal=kgTotales>0?total/kgTotales:(compraItems[0]?.cost_unit_calculado||0);
+
   const compraId=uid();
-  const compra={id:compraId,day,proveedor:prov,nro_factura:fact||null,total,pago_efectivo:ef,pago_transferencia:tr,note:note||null,time:arTime()};
+  const compra={
+    id:compraId,day,proveedor:prov,nro_factura:fact||null,total,
+    pago_efectivo:ef,pago_transferencia:tr,
+    grupos_propagados:JSON.stringify(propagarA),
+    note:note||null,time:arTime()
+  };
   const items=compraItems.map(x=>({id:uid(),compra_id:compraId,...x}));
-  // actualizar stock de producción y costos de insumos
+
+  // actualizar costo en artículos individuales
   items.forEach(x=>{
-    if(x.tipo_destino==='stock_prod'){const g=S.sg.find(sg=>sg.id===x.ref_id);if(g){g.stock_qty=(g.stock_qty||0)+(x.qty_real||x.qty_compra);g.cost_unit=x.cost_unit_calculado||g.cost_unit;}}
-    else if(x.tipo_destino==='insumo'){const ins=S.ins.find(i=>i.id===x.ref_id);if(ins){ins.costUnit=x.cost_unit_calculado||ins.costUnit;ins.cost_unit=ins.costUnit;}}
+    if(x.tipo_destino==='stock_venta'){
+      const g=S.sg.find(sg=>sg.id===x.ref_id);
+      if(g)g.cost_unit=x.cost_unit_calculado||g.cost_unit;
+    } else if(x.tipo_destino==='insumo'){
+      const ins=S.ins.find(i=>i.id===x.ref_id);
+      if(ins){ins.costUnit=x.cost_unit_calculado||ins.costUnit;ins.cost_unit=ins.costUnit;}
+    }
   });
-  // registrar como gasto automáticamente
+
+  // propagar costo/kg global a los grupos seleccionados
+  propagarA.forEach(gid=>{
+    const g=S.sg.find(x=>x.id===gid);
+    if(g)g.cost_unit=costoKgGlobal;
+  });
+
+  // registrar gasto automático (solo el total, informativo)
   const gastoRow={id:uid(),day,descripcion:'Compra: '+prov+(fact?' F/'+fact:''),cat:'Materia prima',amount:total,time:arTime()};
   if(!S.ga[day])S.ga[day]=[];S.ga[day].push(gastoRow);
+
   S.co.push(compra);S.coi.push(...items);compraItems=[];save();render();
+
   if(online){sync('busy','guardando...');try{
     await sbUp('compras',compra);
     if(items.length)await sbUp('compras_items',items);
     await sbUp('gastos',gastoRow);
-    const changed=[...new Set(items.map(x=>x.ref_id))];
-    for(const id of changed){
-      const g=S.sg.find(x=>x.id===id);if(g)await sbUp('stock_groups',{id:g.id,name:g.name,unit:g.unit,tipo:g.tipo,stock_qty:g.stock_qty,cost_unit:g.cost_unit||0});
-      const ins=S.ins.find(x=>x.id===id);if(ins)await sbUp('insumos',{id:ins.id,name:ins.name,unit:ins.unit,cost_unit:ins.costUnit});
+    // actualizar todos los grupos afectados en Supabase
+    const changedIds=[...new Set([...items.map(x=>x.ref_id),...propagarA])];
+    for(const id of changedIds){
+      const g=S.sg.find(x=>x.id===id);
+      if(g)await sbUp('stock_groups',{id:g.id,name:g.name,unit:g.unit,tipo:g.tipo,stock_qty:g.stock_qty,cost_unit:g.cost_unit||0});
+      const ins=S.ins.find(x=>x.id===id);
+      if(ins)await sbUp('insumos',{id:ins.id,name:ins.name,unit:ins.unit,cost_unit:ins.costUnit});
     }
     sync('ok','guardado');
+    toast(`Costo/kg actualizado en ${propagarA.length} grupo(s) ✓`);
   }catch(e){sync('err','error');console.error(e)}}
 }
 
 async function delCompra(id){
-  if(!confirm('¿Eliminar esta factura? Se revertirá el stock y el gasto asociado.'))return;
+  if(!confirm('¿Eliminar esta factura? Se revertirá el gasto asociado.'))return;
   const c=S.co.find(x=>x.id===id);
   if(c){
-    const items=S.coi.filter(x=>x.compra_id===id);
-    // revertir stock
-    items.forEach(x=>{if(x.tipo_destino==='stock_prod'){const g=S.sg.find(sg=>sg.id===x.ref_id);if(g)g.stock_qty=Math.max(0,(g.stock_qty||0)-(x.qty_real||x.qty_compra));}});
-    // revertir gasto: buscar y eliminar el gasto auto-generado
+    // revertir gasto automático
     const desc='Compra: '+c.proveedor+(c.nro_factura?' F/'+c.nro_factura:'');
     S.ga[day]=(S.ga[day]||[]).filter(g=>!(g.descripcion===desc&&g.amount===c.total));
+    // nota: no revertimos el costo/kg en los grupos porque el precio histórico del día queda
+    // y porque no sabemos a cuánto estaba antes. El usuario puede corregirlo manualmente.
   }
   S.co=S.co.filter(x=>x.id!==id);S.coi=S.coi.filter(x=>x.compra_id!==id);save();render();
-  if(online){try{
-    await sbDel('compras',id);
-    // update reverted stocks
-    if(c){const items=S.coi.filter(x=>x.compra_id===id);const changed=[...new Set(items.map(x=>x.ref_id))];for(const gid of changed){const g=S.sg.find(x=>x.id===gid);if(g)await sbUp('stock_groups',{id:g.id,name:g.name,unit:g.unit,tipo:g.tipo,stock_qty:g.stock_qty,cost_unit:g.cost_unit||0});}}
-  }catch(e){}}
+  if(online){try{await sbDel('compras',id);}catch(e){}}
 }
 
 /* ══════════════════════════════════════════

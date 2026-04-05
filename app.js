@@ -71,7 +71,7 @@ function updatePD(){const el=document.getElementById('pin-display');if(el)el.tex
 async function pinOk(){
   if(!pinBuf){document.getElementById('pin-error').textContent='Ingresá tu PIN';return;}
   let usr=S.us.find(u=>u.rol===loginRol&&u.pin===pinBuf&&u.activo!==false);
-  if(!usr){if(loginRol==='dueno'&&pinBuf==='1408')usr={id:'usr_dueno',nombre:'Licha',rol:'dueno'};else if(loginRol==='empleado'&&pinBuf==='0000')usr={id:'usr_empleado',nombre:'Empleado',rol:'empleado'};}
+  if(!usr){if(loginRol==='dueno'&&pinBuf==='1234')usr={id:'usr_dueno',nombre:'Dueño',rol:'dueno'};else if(loginRol==='empleado'&&pinBuf==='0000')usr={id:'usr_empleado',nombre:'Empleado',rol:'empleado'};}
   if(!usr){document.getElementById('pin-error').textContent='PIN incorrecto';pinBuf='';updatePD();return;}
   sesion={id:usr.id,nombre:usr.nombre,rol:usr.rol};LC.s('sesion',sesion);
   document.getElementById('login-screen').style.display='none';
@@ -780,9 +780,13 @@ async function saveCompra(){
     if(g)g.cost_unit=costoKgGlobal;
   });
 
-  // registrar gasto automático (solo el total, informativo)
-  const gastoRow={id:uid(),day,descripcion:'Compra: '+prov+(fact?' F/'+fact:''),cat:'Materia prima',amount:total,time:arTime()};
+  // registrar gasto automático — guardamos su ID dentro de la compra para poder borrarlo exactamente
+  const gastoId=uid();
+  const gastoRow={id:gastoId,day,descripcion:'Compra: '+prov+(fact?' F/'+fact:''),cat:'Materia prima',amount:total,time:arTime()};
   if(!S.ga[day])S.ga[day]=[];S.ga[day].push(gastoRow);
+
+  // guardamos el gasto_id dentro de la compra para vincularlo
+  compra.gasto_id=gastoId;
 
   S.co.push(compra);S.coi.push(...items);compraItems=[];save();render();
 
@@ -804,17 +808,32 @@ async function saveCompra(){
 }
 
 async function delCompra(id){
-  if(!confirm('¿Eliminar esta factura? Se revertirá el gasto asociado.'))return;
+  if(!confirm('¿Eliminar esta factura? Se eliminará el gasto asociado.'))return;
   const c=S.co.find(x=>x.id===id);
-  if(c){
-    // revertir gasto automático
+  if(!c)return;
+
+  // 1. Eliminar el gasto vinculado usando gasto_id exacto
+  if(c.gasto_id){
+    // local
+    Object.keys(S.ga).forEach(d=>{S.ga[d]=(S.ga[d]||[]).filter(g=>g.id!==c.gasto_id);});
+    // remoto
+    if(online){try{await sbDel('gastos',c.gasto_id);}catch(e){console.error('del gasto',e)}}
+  } else {
+    // fallback: buscar por descripción y monto en el día de la compra
     const desc='Compra: '+c.proveedor+(c.nro_factura?' F/'+c.nro_factura:'');
-    S.ga[day]=(S.ga[day]||[]).filter(g=>!(g.descripcion===desc&&g.amount===c.total));
-    // nota: no revertimos el costo/kg en los grupos porque el precio histórico del día queda
-    // y porque no sabemos a cuánto estaba antes. El usuario puede corregirlo manualmente.
+    const gaDay=S.ga[c.day]||[];
+    const match=gaDay.find(g=>g.descripcion===desc&&g.amount===c.total);
+    if(match){
+      S.ga[c.day]=gaDay.filter(g=>g.id!==match.id);
+      if(online){try{await sbDel('gastos',match.id);}catch(e){}}
+    }
   }
-  S.co=S.co.filter(x=>x.id!==id);S.coi=S.coi.filter(x=>x.compra_id!==id);save();render();
-  if(online){try{await sbDel('compras',id);}catch(e){}}
+
+  // 2. Eliminar compra e items local y remoto
+  S.co=S.co.filter(x=>x.id!==id);
+  S.coi=S.coi.filter(x=>x.compra_id!==id);
+  save();render();
+  if(online){try{await sbDel('compras',id);}catch(e){console.error('del compra',e)}}
 }
 
 /* ══════════════════════════════════════════

@@ -71,7 +71,7 @@ function updatePD(){const el=document.getElementById('pin-display');if(el)el.tex
 async function pinOk(){
   if(!pinBuf){document.getElementById('pin-error').textContent='Ingresá tu PIN';return;}
   let usr=S.us.find(u=>u.rol===loginRol&&u.pin===pinBuf&&u.activo!==false);
-  if(!usr){if(loginRol==='dueno'&&pinBuf==='1234')usr={id:'usr_dueno',nombre:'Dueño',rol:'dueno'};else if(loginRol==='empleado'&&pinBuf==='0000')usr={id:'usr_empleado',nombre:'Empleado',rol:'empleado'};}
+  if(!usr){if(loginRol==='dueno'&&pinBuf==='1408')usr={id:'usr_dueno',nombre:'Licha',rol:'dueno'};else if(loginRol==='empleado'&&pinBuf==='1234')usr={id:'usr_empleado',nombre:'Martu',rol:'empleado'};}
   if(!usr){document.getElementById('pin-error').textContent='PIN incorrecto';pinBuf='';updatePD();return;}
   sesion={id:usr.id,nombre:usr.nombre,rol:usr.rol};LC.s('sesion',sesion);
   document.getElementById('login-screen').style.display='none';
@@ -646,7 +646,15 @@ function rCompras(){
       <div class="fl" style="max-width:80px"><label>Precio total $</label><input type="number" id="ci-precio" placeholder="0" oninput="calcCostoUnitario()"></div>
       <button class="btn" onclick="addCompraItem()" style="align-self:flex-end;padding:6px 10px;font-size:11px">+</button>
     </div>
-    <div style="font-size:9px;color:var(--tx3);font-family:var(--mo);margin-top:2px" id="costo-preview"></div>
+    <div style="display:flex;gap:16px;margin-top:6px;flex-wrap:wrap">
+      <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;font-family:var(--mo)">
+        <input type="checkbox" id="ci-upd-stock" checked style="width:auto;accent-color:var(--ac)"> Actualizar stock
+      </label>
+      <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;font-family:var(--mo)">
+        <input type="checkbox" id="ci-upd-cost" checked style="width:auto;accent-color:var(--ac)"> Actualizar costo/unidad
+      </label>
+    </div>
+    <div style="font-size:9px;color:var(--tx3);font-family:var(--mo);margin-top:4px" id="costo-preview"></div>
     <div style="font-size:9px;color:var(--tx3);font-family:var(--mo)">Cant. real = kg reales de la pesada. Ej: 4 cajones → 74kg → costo/kg = total ÷ 74</div>
   </div>
 
@@ -698,6 +706,7 @@ function renderCompraItems(){
       <div><div style="font-size:12px;font-weight:500">${esc(x.descripcion)}</div>
         <div style="font-size:10px;color:var(--tx3);font-family:var(--mo)">${x.qty_compra} ${x.unit_compra||''} ${x.qty_real?'→ '+fQ(x.qty_real,x.unit_real):''}</div>
         <div style="font-size:10px;color:var(--ac);font-family:var(--mo)">${$m(x.precio_total)} · costo: ${$d2(x.cost_unit_calculado||0)}/${x.unit_real||'kg'}</div>
+        <div style="font-size:9px;color:var(--tx3);font-family:var(--mo);margin-top:2px">${x.upd_stock?'✓ stock':'○ sin stock'} · ${x.upd_cost?'✓ costo':'○ sin costo'}</div>
       </div>
       <button class="dbtn" onclick="rmCompraItem(${i})">✕</button>
     </div>
@@ -712,6 +721,8 @@ function addCompraItem(){
   const uc=document.getElementById('ci-uc')?.value.trim()||'unidad';
   const qtyR=parseFloat(document.getElementById('ci-qtyr')?.value)||0;
   const precio=parseFloat(document.getElementById('ci-precio')?.value)||0;
+  const updStock=document.getElementById('ci-upd-stock')?.checked!==false;
+  const updCost=document.getElementById('ci-upd-cost')?.checked!==false;
   if(!desc||!qtyC||!precio)return alert('Completá descripción, cantidad y precio');
   const unitReal=refOpt?.dataset?.u||'kg';
   const base=qtyR||qtyC;
@@ -723,7 +734,8 @@ function addCompraItem(){
     descripcion:desc,
     tipo_destino:isStock?'stock_venta':isIns?'insumo':'otro',
     ref_id,qty_compra:qtyC,unit_compra:uc,qty_real:qtyR||qtyC,unit_real:unitReal,
-    precio_total:precio,cost_unit_calculado:costCalc
+    precio_total:precio,cost_unit_calculado:costCalc,
+    upd_stock:updStock,upd_cost:updCost
   });
   document.getElementById('ci-desc').value='';
   document.getElementById('ci-qtyc').value='';
@@ -763,14 +775,19 @@ async function saveCompra(){
   };
   const items=compraItems.map(x=>({id:uid(),compra_id:compraId,...x}));
 
-  // actualizar costo en artículos individuales
+  // actualizar stock y costo según flags de cada artículo
   items.forEach(x=>{
     if(x.tipo_destino==='stock_venta'){
       const g=S.sg.find(sg=>sg.id===x.ref_id);
-      if(g)g.cost_unit=x.cost_unit_calculado||g.cost_unit;
+      if(g){
+        if(x.upd_stock!==false)g.stock_qty=(g.stock_qty||0)+(x.qty_real||x.qty_compra);
+        if(x.upd_cost!==false)g.cost_unit=x.cost_unit_calculado||g.cost_unit;
+      }
     } else if(x.tipo_destino==='insumo'){
       const ins=S.ins.find(i=>i.id===x.ref_id);
-      if(ins){ins.costUnit=x.cost_unit_calculado||ins.costUnit;ins.cost_unit=ins.costUnit;}
+      if(ins){
+        if(x.upd_cost!==false){ins.costUnit=x.cost_unit_calculado||ins.costUnit;ins.cost_unit=ins.costUnit;}
+      }
     }
   });
 
@@ -808,18 +825,24 @@ async function saveCompra(){
 }
 
 async function delCompra(id){
-  if(!confirm('¿Eliminar esta factura? Se eliminará el gasto asociado.'))return;
+  if(!confirm('¿Eliminar esta factura? Se revertirá el stock y el gasto asociado.'))return;
   const c=S.co.find(x=>x.id===id);
   if(!c)return;
+  const items=S.coi.filter(x=>x.compra_id===id);
 
-  // 1. Eliminar el gasto vinculado usando gasto_id exacto
+  // 1. Revertir stock: restar los qty_real que se habían sumado a cada grupo de venta
+  items.forEach(x=>{
+    if(x.tipo_destino==='stock_venta'){
+      const g=S.sg.find(sg=>sg.id===x.ref_id);
+      if(g)g.stock_qty=Math.max(0,(g.stock_qty||0)-(x.qty_real||x.qty_compra));
+    }
+  });
+
+  // 2. Eliminar el gasto vinculado — primero por gasto_id exacto, luego fallback
   if(c.gasto_id){
-    // local
     Object.keys(S.ga).forEach(d=>{S.ga[d]=(S.ga[d]||[]).filter(g=>g.id!==c.gasto_id);});
-    // remoto
     if(online){try{await sbDel('gastos',c.gasto_id);}catch(e){console.error('del gasto',e)}}
   } else {
-    // fallback: buscar por descripción y monto en el día de la compra
     const desc='Compra: '+c.proveedor+(c.nro_factura?' F/'+c.nro_factura:'');
     const gaDay=S.ga[c.day]||[];
     const match=gaDay.find(g=>g.descripcion===desc&&g.amount===c.total);
@@ -829,11 +852,20 @@ async function delCompra(id){
     }
   }
 
-  // 2. Eliminar compra e items local y remoto
+  // 3. Eliminar compra e items
   S.co=S.co.filter(x=>x.id!==id);
   S.coi=S.coi.filter(x=>x.compra_id!==id);
   save();render();
-  if(online){try{await sbDel('compras',id);}catch(e){console.error('del compra',e)}}
+
+  if(online){
+    try{await sbDel('compras',id);}catch(e){console.error('del compra',e)}
+    // Sincronizar stocks revertidos
+    const changedIds=[...new Set(items.filter(x=>x.tipo_destino==='stock_venta').map(x=>x.ref_id))];
+    for(const gid of changedIds){
+      const g=S.sg.find(x=>x.id===gid);
+      if(g){try{await sbUp('stock_groups',{id:g.id,name:g.name,unit:g.unit,tipo:g.tipo,stock_qty:g.stock_qty,cost_unit:g.cost_unit||0});}catch(e){}}
+    }
+  }
 }
 
 /* ══════════════════════════════════════════
@@ -875,7 +907,11 @@ function mData(ym){
   const ingTr=movs.filter(m=>m.tipo==='ingreso'&&m.metodo==='transferencia').reduce((s,m)=>s+m.monto,0);
   const egEf=movs.filter(m=>m.tipo==='egreso'&&m.metodo==='efectivo').reduce((s,m)=>s+m.monto,0);
   const egTr=movs.filter(m=>m.tipo==='egreso'&&m.metodo==='transferencia').reduce((s,m)=>s+m.monto,0);
-  return{vs,tv,tvEf,tvTr,tg,byG,ingEf,ingTr,egEf,egTr};
+  const ingTotal=ingEf+ingTr;
+  const egTotal=egEf+egTr;
+  // resultado real = ventas + ingresos extra - egresos extra - gastos
+  const resultado=tv+ingTotal-egTotal-tg;
+  return{vs,tv,tvEf,tvTr,tg,byG,ingEf,ingTr,egEf,egTr,ingTotal,egTotal,resultado};
 }
 
 function dayData(d){
@@ -884,10 +920,16 @@ function dayData(d){
   const byG={};
   vs.forEach(v=>{const g=S.sg.find(x=>x.id===v.group_id),gn=g?g.name:'Otros';if(!byG[gn])byG[gn]={qty:0,tot:0,ef:0,tr:0,unit:g?.unit||''};byG[gn].qty+=(v.stock_used||0);byG[gn].tot+=v.total;if(v.pago==='Efectivo')byG[gn].ef+=v.total;else byG[gn].tr+=v.total;});
   const tg=(S.ga[d]||[]).reduce((s,g)=>s+g.amount,0);
-  return{vs,tv,tvEf,tvTr:tv-tvEf,byG,tg};
+  const movs=S.caja[d]||[];
+  const ingTotal=movs.filter(m=>m.tipo==='ingreso').reduce((s,m)=>s+m.monto,0);
+  const egTotal=movs.filter(m=>m.tipo==='egreso').reduce((s,m)=>s+m.monto,0);
+  const ingEf=movs.filter(m=>m.tipo==='ingreso'&&m.metodo==='efectivo').reduce((s,m)=>s+m.monto,0);
+  const ingTr=movs.filter(m=>m.tipo==='ingreso'&&m.metodo==='transferencia').reduce((s,m)=>s+m.monto,0);
+  const resultado=tv+ingTotal-egTotal-tg;
+  return{vs,tv,tvEf,tvTr:tv-tvEf,byG,tg,ingTotal,egTotal,ingEf,ingTr,resultado};
 }
 
-function yrData(yr){const ms=[];for(let m=1;m<=12;m++){const ym=yr+'-'+m.toString().padStart(2,'0');const{tv,tg}=mData(ym);ms.push({lbl:fM(ym).split(' ')[0],tv,tg,res:tv-tg})}return ms}
+function yrData(yr){const ms=[];for(let m=1;m<=12;m++){const ym=yr+'-'+m.toString().padStart(2,'0');const{tv,tg,ingTotal,egTotal}=mData(ym);ms.push({lbl:fM(ym).split(' ')[0],tv,tg,ing:ingTotal,eg:egTotal,res:tv+ingTotal-egTotal-tg})}return ms}
 
 function rReportes(){
   const mths=getMths();if(!mths.includes(rMonth)&&mths.length)rMonth=mths[0];
@@ -909,7 +951,7 @@ function setRM(m){rMonth=m;go('reportes')}
 function setRTab(t){rTab=t;go('reportes')}
 
 function rRepDia(){
-  const{vs,tv,tvEf,tvTr,byG,tg}=dayData(day);const res=tv-tg;
+  const{vs,tv,tvEf,tvTr,byG,tg,ingTotal,egTotal,ingEf,ingTr,resultado}=dayData(day);
   const bgRows=Object.entries(byG).sort((a,b)=>b[1].tot-a[1].tot).map(([n,d])=>`<tr>
     <td>${esc(n)}</td>
     <td style="font-family:var(--mo)">${fQ(d.qty,d.unit)}</td>
@@ -917,26 +959,33 @@ function rRepDia(){
     <td style="font-family:var(--mo);color:var(--gn)">${$m(d.ef)}</td>
     <td style="font-family:var(--mo);color:var(--bl)">${$m(d.tr)}</td>
   </tr>`).join('')||`<tr><td colspan="5" class="empty-row">Sin ventas</td></tr>`;
+  const movRows=(S.caja[day]||[]).length?`
+    <div class="tbk" style="margin-top:10px"><div class="tt">Movimientos de caja del día</div>
+      <table><thead><tr><th>Hora</th><th>Descripción</th><th>Tipo</th><th>Monto</th></tr></thead><tbody>
+      ${(S.caja[day]||[]).map(m=>`<tr><td>${m.time||''}</td><td>${esc(m.descripcion)}</td><td><span class="tag ${m.tipo==='ingreso'?'tv':'tg'}">${m.tipo}</span></td><td style="color:${m.tipo==='ingreso'?'var(--gn)':'var(--rd)'}">${m.tipo==='ingreso'?'+':'-'}${$m(m.monto)}</td></tr>`).join('')}
+      </tbody></table>
+    </div>`:'';
   return`
   <div style="font-size:11px;color:var(--tx2);font-family:var(--mo);margin-bottom:10px">📅 ${fDL(day)}</div>
   <div class="kpis t3">
     <div class="kc hi"><div class="kl">Ventas</div><div class="kv a">${$m(tv)}</div></div>
     <div class="kc"><div class="kl">Gastos</div><div class="kv r">${$m(tg)}</div></div>
-    <div class="kc"><div class="kl">Resultado</div><div class="kv ${res>=0?'g':'r'}">${$m(res)}</div></div>
+    <div class="kc"><div class="kl">Resultado</div><div class="kv ${resultado>=0?'g':'r'}">${$m(resultado)}</div></div>
   </div>
-  <div class="kpis">
-    <div class="kc"><div class="kl">Efectivo</div><div class="kv g">${$m(tvEf)}</div></div>
-    <div class="kc"><div class="kl">Transferencias</div><div class="kv b">${$m(tvTr)}</div></div>
+  <div class="kpis t3">
+    <div class="kc"><div class="kl">Efectivo ventas</div><div class="kv g" style="font-size:14px">${$m(tvEf)}</div></div>
+    <div class="kc"><div class="kl">Transf. ventas</div><div class="kv b" style="font-size:14px">${$m(tvTr)}</div></div>
+    <div class="kc"><div class="kl">Mov. extra</div><div class="kv ${ingTotal-egTotal>=0?'g':'r'}" style="font-size:14px">${ingTotal-egTotal>=0?'+':''}${$m(ingTotal-egTotal)}</div></div>
   </div>
   <div class="tbk"><div class="tt">Ventas por grupo — ${fDL(day)}</div>
     <table><thead><tr><th>Grupo</th><th>Cantidad</th><th>Total</th><th>Efectivo</th><th>Transf.</th></tr></thead><tbody>${bgRows}</tbody></table>
   </div>
+  ${movRows}
   <button class="btn btng" onclick="exportExcel()" style="width:100%;margin-top:6px">⬇ Exportar todo a Excel</button>`;
 }
 
 function rRepMes(mthTabs){
-  const{tv,tvEf,tvTr,tg,byG}=mData(rMonth);const res=tv-tg;
-  const[yr,mo]=rMonth.split('-').map(Number);const dc=new Date(yr,mo,0).getDate();
+  const{tv,tvEf,tvTr,tg,byG,ingEf,ingTr,egEf,egTr,ingTotal,egTotal,resultado}=mData(rMonth);
   const bgRows=Object.entries(byG).sort((a,b)=>b[1].tot-a[1].tot).map(([n,d])=>`<tr>
     <td>${esc(n)}</td><td style="font-family:var(--mo)">${fQ(d.qty,d.unit)}</td>
     <td style="font-family:var(--mo)">${$m(d.tot)}</td>
@@ -948,11 +997,12 @@ function rRepMes(mthTabs){
   <div class="kpis t3">
     <div class="kc hi"><div class="kl">Ventas</div><div class="kv a">${$m(tv)}</div></div>
     <div class="kc"><div class="kl">Gastos</div><div class="kv r">${$m(tg)}</div></div>
-    <div class="kc"><div class="kl">Resultado</div><div class="kv ${res>=0?'g':'r'}">${$m(res)}</div></div>
+    <div class="kc"><div class="kl">Resultado</div><div class="kv ${resultado>=0?'g':'r'}">${$m(resultado)}</div></div>
   </div>
-  <div class="kpis">
-    <div class="kc"><div class="kl">Ef. del mes</div><div class="kv g">${$m(tvEf)}</div></div>
-    <div class="kc"><div class="kl">Transf. del mes</div><div class="kv b">${$m(tvTr)}</div></div>
+  <div class="kpis t3">
+    <div class="kc"><div class="kl">Ef. ventas</div><div class="kv g" style="font-size:14px">${$m(tvEf)}</div></div>
+    <div class="kc"><div class="kl">Tr. ventas</div><div class="kv b" style="font-size:14px">${$m(tvTr)}</div></div>
+    <div class="kc"><div class="kl">Ingresos extra</div><div class="kv ${ingTotal-egTotal>=0?'g':'r'}" style="font-size:14px">${$m(ingTotal-egTotal)}</div></div>
   </div>
   <div class="blk"><div class="bt">Ventas diarias — ${fM(rMonth)}</div><div class="ch-w"><canvas id="cM"></canvas></div></div>
   <div class="tbk"><div class="tt">Acumulado por grupo</div>
@@ -962,13 +1012,13 @@ function rRepMes(mthTabs){
 }
 
 function rRepAnual(yr){
-  const an=yrData(yr);const totV=an.reduce((s,x)=>s+x.tv,0),totG=an.reduce((s,x)=>s+x.tg,0);
+  const an=yrData(yr);const totV=an.reduce((s,x)=>s+x.tv,0),totG=an.reduce((s,x)=>s+x.tg,0),totRes=an.reduce((s,x)=>s+x.res,0);
   const rows=an.map(m=>`<tr><td>${m.lbl}</td><td style="font-family:var(--mo);color:var(--ac)">${$m(m.tv)}</td><td style="font-family:var(--mo);color:var(--rd)">${$m(m.tg)}</td><td style="font-family:var(--mo);font-weight:500;color:${m.res>=0?'var(--gn)':'var(--rd)'}">${$m(m.res)}</td></tr>`).join('');
   return`
   <div class="kpis t3">
     <div class="kc hi"><div class="kl">Ventas ${yr}</div><div class="kv a">${$m(totV)}</div></div>
     <div class="kc"><div class="kl">Gastos ${yr}</div><div class="kv r">${$m(totG)}</div></div>
-    <div class="kc"><div class="kl">Resultado</div><div class="kv ${totV-totG>=0?'g':'r'}">${$m(totV-totG)}</div></div>
+    <div class="kc"><div class="kl">Resultado</div><div class="kv ${totRes>=0?'g':'r'}">${$m(totRes)}</div></div>
   </div>
   <div class="blk"><div class="bt">Ventas vs Gastos — ${yr}</div><div class="ch-w" style="height:155px"><canvas id="cA"></canvas></div></div>
   <div class="tbk"><div class="tt">Detalle mensual ${yr}</div>
@@ -978,23 +1028,28 @@ function rRepAnual(yr){
 }
 
 function rRepFin(mthTabs){
-  const{tv,tvEf,tvTr,tg,byG,ingEf,ingTr,egEf,egTr}=mData(rMonth);
-  const ganancia=tv-tg,margen=tv>0?Math.round((ganancia/tv)*100):0;
+  const{tv,tvEf,tvTr,tg,byG,ingEf,ingTr,egEf,egTr,ingTotal,egTotal,resultado}=mData(rMonth);
+  const ingresoTotal=tv+ingTotal;
+  const margen=ingresoTotal>0?Math.round((resultado/ingresoTotal)*100):0;
   const margenCol=margen>30?'var(--gn)':margen>10?'var(--ac)':'var(--rd)';
   const catGas={};Object.entries(S.ga).filter(([d])=>d.startsWith(rMonth)).flatMap(([,g])=>g).forEach(g=>{catGas[g.cat]=(catGas[g.cat]||0)+g.amount});
   const catRows=Object.entries(catGas).sort((a,b)=>b[1]-a[1]).map(([c,v])=>`<tr><td>${c}</td><td style="font-family:var(--mo)">${$m(v)}</td><td style="font-family:var(--mo);color:var(--tx3)">${Math.round(tg>0?(v/tg)*100:0)}%</td></tr>`).join('')||`<tr><td colspan="3" class="empty-row">Sin gastos</td></tr>`;
   return`
   <div class="mtabs">${mthTabs}</div>
   <div class="kpis t3">
-    <div class="kc hi"><div class="kl">Ingresos</div><div class="kv a">${$m(tv)}</div></div>
+    <div class="kc hi"><div class="kl">Ingresos totales</div><div class="kv a">${$m(ingresoTotal)}</div><div class="kh">ventas + extra</div></div>
     <div class="kc"><div class="kl">Gastos</div><div class="kv r">${$m(tg)}</div></div>
-    <div class="kc"><div class="kl">Ganancia</div><div class="kv ${ganancia>=0?'g':'r'}">${$m(ganancia)}</div></div>
+    <div class="kc"><div class="kl">Resultado</div><div class="kv ${resultado>=0?'g':'r'}">${$m(resultado)}</div></div>
   </div>
   <div class="kpis t3">
     <div class="kc"><div class="kl">Margen</div><div class="kv" style="color:${margenCol}">${margen}%</div></div>
     <div class="kc"><div class="kl">Efectivo total</div><div class="kv g" style="font-size:14px">${$m(tvEf+ingEf-egEf)}</div></div>
     <div class="kc"><div class="kl">Digital total</div><div class="kv b" style="font-size:14px">${$m(tvTr+ingTr-egTr)}</div></div>
   </div>
+  ${ingTotal>0||egTotal>0?`<div class="blk"><div class="bt">Movimientos de caja del período</div>
+    <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--br)"><span style="font-size:11px;color:var(--tx2)">Ingresos extra (fondos, etc.)</span><span style="font-family:var(--mo);color:var(--gn)">${$m(ingTotal)}</span></div>
+    <div style="display:flex;justify-content:space-between;padding:5px 0"><span style="font-size:11px;color:var(--tx2)">Egresos extra (retiros, etc.)</span><span style="font-family:var(--mo);color:var(--rd)">${$m(egTotal)}</span></div>
+  </div>`:''}
   <div class="tbk"><div class="tt">Gastos por categoría</div>
     <table><thead><tr><th>Categoría</th><th>Monto</th><th>%</th></tr></thead><tbody>${catRows}</tbody></table>
   </div>

@@ -63,7 +63,7 @@ function upPD(){const el=document.getElementById('pin-display');if(el)el.textCon
 async function pinOk(){
   if(!pinBuf){document.getElementById('pin-error').textContent='Ingresá tu PIN';return;}
   let usr=S.us.find(u=>u.rol===loginRol&&u.pin===pinBuf&&u.activo!==false);
-  if(!usr){if(loginRol==='dueno'&&pinBuf==='1408')usr={id:'usr_dueno',nombre:'Dueño',rol:'dueno'};else if(loginRol==='empleado'&&pinBuf==='0000')usr={id:'usr_empleado',nombre:'Empleado',rol:'empleado'};}
+  if(!usr){if(loginRol==='dueno'&&pinBuf==='1234')usr={id:'usr_dueno',nombre:'Dueño',rol:'dueno'};else if(loginRol==='empleado'&&pinBuf==='0000')usr={id:'usr_empleado',nombre:'Empleado',rol:'empleado'};}
   if(!usr){document.getElementById('pin-error').textContent='PIN incorrecto';pinBuf='';upPD();return;}
   sesion={id:usr.id,nombre:usr.nombre,rol:usr.rol};LC.s('sesion',sesion);
   document.getElementById('login-screen').style.display='none';
@@ -155,7 +155,10 @@ function rCaja(){
     </tr>`;
   }).join(''):`<tr><td colspan="5" class="empty-row">Sin ventas</td></tr>`;
 
-  const gasRows=dG().length?dG().map(g=>`<tr><td>${g.time||''}</td><td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(g.descripcion)}</td><td><span class="tag tg">${(g.cat||'').slice(0,5)}</span></td><td>${$m(g.amount)}</td><td><button class="dbtn" onclick="delGa('${g.id}')">✕</button></td></tr>`).join(''):`<tr><td colspan="5" class="empty-row">Sin gastos</td></tr>`;
+  const compraGastoIds=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));
+  const gasOp=dG().filter(g=>!compraGastoIds.has(g.id));
+  const gaEf=gasOp.filter(g=>g.metodo!=='transferencia').reduce((s,g)=>s+g.amount,0);
+  const gasRows=gasOp.length?gasOp.map(g=>`<tr><td>${g.time||''}</td><td style="max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(g.descripcion)}</td><td><span class="tag tg">${(g.cat||'').slice(0,5)}</span></td><td>${$m(g.amount)}</td><td><span class="tag ${g.metodo==='transferencia'?'tp':'tv'}">${g.metodo==='transferencia'?'Tr.':'Ef.'}</span></td><td><button class="dbtn" onclick="delGa('${g.id}')">✕</button></td></tr>`).join(''):`<tr><td colspan="6" class="empty-row">Sin gastos</td></tr>`;
 
   const mRows=movs.length?movs.map(m=>`<tr><td>${m.time||''}</td><td>${esc(m.descripcion)}</td><td><span class="tag ${m.tipo==='ingreso'?'tv':'tg'}">${m.tipo}</span></td><td style="color:${m.tipo==='ingreso'?'var(--gn)':'var(--rd)'}">${m.tipo==='ingreso'?'+':'-'}${$m(m.monto)}</td><td><span class="tag tp">${m.metodo.slice(0,3)}</span></td><td><button class="dbtn" onclick="delMov('${m.id}')">✕</button></td></tr>`).join(''):`<tr><td colspan="6" class="empty-row">Sin movimientos</td></tr>`;
 
@@ -230,11 +233,12 @@ function rCaja(){
     </div>
     <div class="fr">
       <div class="fl"><label>Monto $</label><input type="number" id="g-a" placeholder="0"></div>
+      <div class="fl" style="max-width:110px"><label>Método</label><select id="g-met"><option value="efectivo">Efectivo</option><option value="transferencia">Transferencia</option></select></div>
       <button class="btn btnr" onclick="addGa()" style="align-self:flex-end">+ Gasto</button>
     </div>
   </div>
   <div class="tbk"><div class="tt">Gastos operativos del día</div>
-    <table><thead><tr><th>Hora</th><th>Descripción</th><th>Cat.</th><th>Monto</th><th></th></tr></thead>
+    <table><thead><tr><th>Hora</th><th>Descripción</th><th>Cat.</th><th>Monto</th><th>Método</th><th></th></tr></thead>
     <tbody>${gasRows}</tbody></table>
   </div>
 
@@ -274,6 +278,16 @@ function rCaja(){
       <div class="fl"><label>Queda en caja</label><input type="text" id="cierre-saldo" readonly style="color:var(--gn);font-size:15px;font-weight:600"></div>
     </div>
     <div style="font-size:10px;color:var(--tx3);font-family:var(--mo);margin:5px 0 10px">El saldo pasa como fondo del día siguiente (editable)</div>
+    <div style="background:var(--sf2);border-radius:8px;padding:10px;margin-bottom:10px;border:1px solid var(--br)">
+      <div style="font-size:9px;color:var(--tx2);font-family:var(--mo);margin-bottom:7px;letter-spacing:.5px">CUENTA DEL DÍA — EFECTIVO</div>
+      <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Fondo inicial</span><span style="font-family:var(--mo);color:var(--gn)">+${$m(fondoInicial)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Ventas efectivo</span><span style="font-family:var(--mo);color:var(--gn)">+${$m(ef)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Gastos en efectivo</span><span style="font-family:var(--mo);color:var(--rd)">-${$m(gaEf)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Retiro</span><span style="font-family:var(--mo);color:var(--rd)" id="cierre-retiro-display">-${$m(cierreHoy?.retiro||0)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:5px 0 3px;border-top:1px solid var(--br);margin-top:4px;font-size:12px;font-weight:600"><span>Debería haber</span><span style="font-family:var(--mo);color:var(--ac)" id="cierre-deberia">${$m(fondoInicial+ef-gaEf-(cierreHoy?.retiro||0))}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Contado</span><span style="font-family:var(--mo)" id="cierre-contado-disp">$0</span></div>
+      <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;font-weight:700"><span>Diferencia</span><span style="font-family:var(--mo)" id="cierre-diferencia">—</span></div>
+    </div>
     <button class="btn btnp" onclick="saveCierre()" style="width:100%">✓ Confirmar cierre</button>
     ${cierreHoy?`<div style="margin-top:8px;padding:8px;background:var(--sf2);border-radius:5px;font-size:11px;font-family:var(--mo);color:var(--tx2)">Último cierre: ${$m(cierreHoy.total_contado)} contado · Retiro: ${$m(cierreHoy.retiro)} · Fondo siguiente: <span style="color:var(--gn)">${$m(cierreHoy.saldo_siguiente)}</span></div>`:''}
   </div>`;
@@ -379,6 +393,19 @@ function calcCierre(){
   const totEl=document.getElementById('cierre-total'),saldoEl=document.getElementById('cierre-saldo');
   if(totEl)totEl.textContent=$m(total);
   if(saldoEl)saldoEl.value=$m(Math.max(0,total-retiro));
+  // actualizar cuenta del día
+  const deberiaEl=document.getElementById('cierre-deberia'),contEl=document.getElementById('cierre-contado-disp'),difEl=document.getElementById('cierre-diferencia'),retDisp=document.getElementById('cierre-retiro-display');
+  if(retDisp)retDisp.textContent='-'+$m(retiro);
+  if(deberiaEl){
+    const vs=dV(),ef=vs.filter(v=>v.pago==='Efectivo'||v.pago_ef>0).reduce((s,v)=>s+(v.pago==='Efectivo'?v.total:(v.pago_ef||0)),0);
+    const compraGastoIds=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));
+    const gaEf=(S.ga[day]||[]).filter(g=>!compraGastoIds.has(g.id)&&g.metodo!=='transferencia').reduce((s,g)=>s+g.amount,0);
+    const prevDay=getPrevDay(day);const fondo=S.cierres?.[prevDay]?.saldo_siguiente||0;
+    const deberia=fondo+ef-gaEf-retiro;
+    deberiaEl.textContent=$m(deberia);
+    if(contEl)contEl.textContent=$m(total);
+    if(difEl){const dif=total-deberia;difEl.textContent=(dif>=0?'+':'')+$m(dif);difEl.style.color=Math.abs(dif)<50?'var(--gn)':dif>0?'var(--ac)':'var(--rd)';}
+  }
 }
 function saveCierre(){
   let total=0;const detalle={};
@@ -400,7 +427,7 @@ function saveCierre(){
 }
 
 /* Gastos */
-async function addGa(){const d2=document.getElementById('g-d').value.trim(),c=document.getElementById('g-c').value,a=parseFloat(document.getElementById('g-a').value)||0;if(!d2||!a)return alert('Completá descripción y monto');const row={id:uid(),day,descripcion:d2,cat:c,amount:a,time:arTime()};if(!S.ga[day])S.ga[day]=[];S.ga[day].push(row);save();render();if(online){sync('busy','guardando...');try{await sbUp('gastos',row);sync('ok','guardado')}catch(e){sync('err','error')}}}
+async function addGa(){const d2=document.getElementById('g-d').value.trim(),c=document.getElementById('g-c').value,a=parseFloat(document.getElementById('g-a').value)||0,met=document.getElementById('g-met')?.value||'efectivo';if(!d2||!a)return alert('Completá descripción y monto');const row={id:uid(),day,descripcion:d2,cat:c,amount:a,metodo:met,time:arTime()};if(!S.ga[day])S.ga[day]=[];S.ga[day].push(row);save();render();if(online){sync('busy','guardando...');try{await sbUp('gastos',row);sync('ok','guardado')}catch(e){sync('err','error')}}}
 async function delGa(id){S.ga[day]=(S.ga[day]||[]).filter(x=>x.id!==id);save();render();if(online){try{await sbDel('gastos',id)}catch(e){}}}
 function rGastos(){
   const gs=dG(),tot=gs.reduce((s,g)=>s+g.amount,0);
@@ -702,23 +729,27 @@ function mData(ym){
   const tvEf=vs.filter(v=>v.pago==='Efectivo'||(v.pago_ef>0&&v.pago==='mixto')).reduce((s,v)=>s+(v.pago==='Efectivo'?v.total:(v.pago_ef||0)),0);
   const tvTr=tv-tvEf;
   const byG={};vs.forEach(v=>{const g=S.sg.find(x=>x.id===v.group_id),gn=g?g.name:'Otros';if(!byG[gn])byG[gn]={qty:0,tot:0,ef:0,tr:0,unit:g?.unit||''};byG[gn].qty+=(v.stock_used||0);byG[gn].tot+=v.total;if(v.pago==='Efectivo')byG[gn].ef+=v.total;else byG[gn].tr+=v.total;});
-  const tg=Object.entries(S.ga).filter(([d])=>d.startsWith(ym)).flatMap(([,g])=>g).reduce((s,g)=>s+g.amount,0);
+  const _compraIdsM=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));
+  const tg=Object.entries(S.ga).filter(([d])=>d.startsWith(ym)).flatMap(([,g])=>g).filter(g=>!_compraIdsM.has(g.id)).reduce((s,g)=>s+g.amount,0);
+  const tCompras=S.co.filter(c=>c.day.startsWith(ym)).reduce((s,c)=>s+c.total,0);
   const movs=Object.entries(S.caja).filter(([d])=>d.startsWith(ym)).flatMap(([,m])=>m);
   const ingEf=movs.filter(m=>m.tipo==='ingreso'&&m.metodo==='efectivo').reduce((s,m)=>s+m.monto,0);
   const ingTr=movs.filter(m=>m.tipo==='ingreso'&&m.metodo==='transferencia').reduce((s,m)=>s+m.monto,0);
   const egEf=movs.filter(m=>m.tipo==='egreso'&&m.metodo==='efectivo').reduce((s,m)=>s+m.monto,0);
   const egTr=movs.filter(m=>m.tipo==='egreso'&&m.metodo==='transferencia').reduce((s,m)=>s+m.monto,0);
-  const ingTotal=ingEf+ingTr,egTotal=egEf+egTr,resultado=tv+ingTotal-egTotal-tg;
-  return{vs,tv,tvEf,tvTr,tg,byG,ingEf,ingTr,egEf,egTr,ingTotal,egTotal,resultado};
+  const ingTotal=ingEf+ingTr,egTotal=egEf+egTr,resultado=tv+ingTotal-egTotal-tg-tCompras;
+  return{vs,tv,tvEf,tvTr,tg,tCompras,byG,ingEf,ingTr,egEf,egTr,ingTotal,egTotal,resultado};
 }
 function dayData(d){
   const vs=S.ve[d]||[],tv=vs.reduce((s,v)=>s+v.total,0);
   const tvEf=vs.filter(v=>v.pago==='Efectivo').reduce((s,v)=>s+v.total,0);
   const byG={};vs.forEach(v=>{const g=S.sg.find(x=>x.id===v.group_id),gn=g?g.name:'Otros';if(!byG[gn])byG[gn]={qty:0,tot:0,ef:0,tr:0,unit:g?.unit||''};byG[gn].qty+=(v.stock_used||0);byG[gn].tot+=v.total;if(v.pago==='Efectivo')byG[gn].ef+=v.total;else byG[gn].tr+=v.total;});
-  const tg=(S.ga[d]||[]).reduce((s,g)=>s+g.amount,0);
+  const _compraIdsD=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));
+  const tg=(S.ga[d]||[]).filter(g=>!_compraIdsD.has(g.id)).reduce((s,g)=>s+g.amount,0);
+  const tCompras=S.co.filter(c=>c.day===d).reduce((s,c)=>s+c.total,0);
   const movs=S.caja[d]||[];const ingTotal=movs.filter(m=>m.tipo==='ingreso').reduce((s,m)=>s+m.monto,0),egTotal=movs.filter(m=>m.tipo==='egreso').reduce((s,m)=>s+m.monto,0);
   const ingEf=movs.filter(m=>m.tipo==='ingreso'&&m.metodo==='efectivo').reduce((s,m)=>s+m.monto,0),ingTr=movs.filter(m=>m.tipo==='ingreso'&&m.metodo==='transferencia').reduce((s,m)=>s+m.monto,0);
-  return{vs,tv,tvEf,tvTr:tv-tvEf,byG,tg,ingTotal,egTotal,ingEf,ingTr,resultado:tv+ingTotal-egTotal-tg};
+  return{vs,tv,tvEf,tvTr:tv-tvEf,byG,tg,tCompras,ingTotal,egTotal,ingEf,ingTr,resultado:tv+ingTotal-egTotal-tg-tCompras};
 }
 function yrData(yr){const ms=[];for(let m=1;m<=12;m++){const ym=yr+'-'+m.toString().padStart(2,'0');const{tv,tg,ingTotal,egTotal}=mData(ym);ms.push({lbl:fM(ym).split(' ')[0],tv,tg,res:tv+ingTotal-egTotal-tg})}return ms}
 
@@ -743,18 +774,19 @@ function setRTab(t){rTab=t;go('reportes')}
 function toggleDetail(id){const el=document.getElementById(id);if(el)el.style.display=el.style.display==='none'?'block':'none';}
 
 function rRepDia(){
-  const{vs,tv,tvEf,tvTr,byG,tg,ingTotal,egTotal,ingEf,ingTr,resultado}=dayData(day);
+  const{vs,tv,tvEf,tvTr,byG,tg,tCompras,ingTotal,egTotal,ingEf,ingTr,resultado}=dayData(day);
   const bgRows=Object.entries(byG).sort((a,b)=>b[1].tot-a[1].tot).map(([n,d])=>`<tr><td>${esc(n)}</td><td style="font-family:var(--mo)">${fQ(d.qty,d.unit)}</td><td style="font-family:var(--mo)">${$m(d.tot)}</td><td style="font-family:var(--mo);color:var(--gn)">${$m(d.ef)}</td><td style="font-family:var(--mo);color:var(--bl)">${$m(d.tr)}</td></tr>`).join('')||`<tr><td colspan="5" class="empty-row">Sin ventas</td></tr>`;
   // tickets del dia agrupados
   const byTicket={};vs.forEach(v=>{const tk=v.ticket_id||v.id;if(!byTicket[tk])byTicket[tk]={items:[],total:0,pago:v.pago,time:v.time||''};byTicket[tk].items.push(v);byTicket[tk].total+=v.total;});
   const tktRows=Object.entries(byTicket).sort((a,b)=>a[1].time.localeCompare(b[1].time)).map(([tid,tk])=>`<tr><td>${tk.time}</td><td>${tk.items.length} ítem(s)</td><td style="font-family:var(--mo)">${$m(tk.total)}</td><td><span class="tag tv">${(tk.pago||'').slice(0,3)}</span></td></tr>`).join('')||`<tr><td colspan="4" class="empty-row">Sin tickets</td></tr>`;
-  const gsRows=(S.ga[day]||[]).map(g=>`<tr><td>${g.time||''}</td><td>${esc(g.descripcion)}</td><td><span class="tag tg">${(g.cat||'').slice(0,5)}</span></td><td>${$m(g.amount)}</td></tr>`).join('')||`<tr><td colspan="4" class="empty-row">Sin gastos</td></tr>`;
+  const _compraIds=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));
+  const gsRows=(S.ga[day]||[]).filter(g=>!_compraIds.has(g.id)).map(g=>`<tr><td>${g.time||''}</td><td>${esc(g.descripcion)}</td><td><span class="tag tg">${(g.cat||'').slice(0,5)}</span></td><td>${$m(g.amount)}</td></tr>`).join('')||`<tr><td colspan="4" class="empty-row">Sin gastos operativos</td></tr>`;
   const compHoy=S.co.filter(c=>c.day===day).map(c=>`<tr><td>${c.time||''}</td><td>${esc(c.proveedor)}</td><td><span class="tag to">compra</span></td><td>${$m(c.total)}</td></tr>`).join('');
   return`
   <div style="font-size:11px;color:var(--tx2);font-family:var(--mo);margin-bottom:10px">📅 ${fDL(day)}</div>
   <div class="kpis t3">
     <div class="kc hi" onclick="toggleDetail('det-vd')" style="cursor:pointer"><div class="kl">Ventas ▾</div><div class="kv a">${$m(tv)}</div><div class="kh">${Object.keys(byTicket).length} tickets</div></div>
-    <div class="kc" onclick="toggleDetail('det-gd')" style="cursor:pointer"><div class="kl">Gastos ▾</div><div class="kv r">${$m(tg)}</div><div class="kh">click para ver</div></div>
+    <div class="kc" onclick="toggleDetail('det-gd')" style="cursor:pointer"><div class="kl">Gastos op. ▾</div><div class="kv r">${$m(tg)}</div><div class="kh">${tCompras>0?'+ compras '+$m(tCompras):'click para ver'}</div></div>
     <div class="kc"><div class="kl">Resultado</div><div class="kv ${resultado>=0?'g':'r'}">${$m(resultado)}</div></div>
   </div>
   <div id="det-vd" style="display:none">
@@ -762,8 +794,9 @@ function rRepDia(){
     <div class="tbk"><div class="tt">Por grupo</div><table><thead><tr><th>Grupo</th><th>Cantidad</th><th>Total</th><th>Efectivo</th><th>Transf.</th></tr></thead><tbody>${bgRows}</tbody></table></div>
   </div>
   <div id="det-gd" style="display:none">
-    <div class="tbk"><div class="tt">Gastos operativos</div><table><thead><tr><th>Hora</th><th>Descripción</th><th>Cat.</th><th>Monto</th></tr></thead><tbody>${gsRows}</tbody></table></div>
+    ${tg>0?`<div class="tbk"><div class="tt">Gastos operativos</div><table><thead><tr><th>Hora</th><th>Descripción</th><th>Cat.</th><th>Monto</th></tr></thead><tbody>${gsRows}</tbody></table></div>`:''}
     ${compHoy?`<div class="tbk"><div class="tt">Compras del día</div><table><thead><tr><th>Hora</th><th>Proveedor</th><th>Tipo</th><th>Total</th></tr></thead><tbody>${compHoy}</tbody></table></div>`:''}
+    ${!tg&&!compHoy?`<div style="font-size:11px;color:var(--tx3);font-family:var(--mo);padding:8px 0">Sin gastos ni compras</div>`:''}
   </div>
   <div class="kpis">
     <div class="kc"><div class="kl">Efectivo</div><div class="kv g">${$m(tvEf+ingEf)}</div></div>
@@ -773,24 +806,26 @@ function rRepDia(){
 }
 
 function rRepMes(mthTabs){
-  const{tv,tvEf,tvTr,tg,byG,ingEf,ingTr,egEf,egTr,ingTotal,egTotal,resultado}=mData(rMonth);
+  const{tv,tvEf,tvTr,tg,tCompras,byG,ingEf,ingTr,egEf,egTr,ingTotal,egTotal,resultado}=mData(rMonth);
   const bgRows=Object.entries(byG).sort((a,b)=>b[1].tot-a[1].tot).map(([n,d])=>`<tr><td>${esc(n)}</td><td style="font-family:var(--mo)">${fQ(d.qty,d.unit)}</td><td style="font-family:var(--mo)">${$m(d.tot)}</td><td style="font-family:var(--mo);color:var(--gn)">${$m(d.ef)}</td><td style="font-family:var(--mo);color:var(--bl)">${$m(d.tr)}</td></tr>`).join('')||`<tr><td colspan="5" class="empty-row">Sin datos</td></tr>`;
   const gastosMes=Object.entries(S.ga).filter(([d])=>d.startsWith(rMonth)).flatMap(([d,gs])=>gs.map(g=>({...g,_d:d})));
-  const gsRows=gastosMes.sort((a,b)=>a._d.localeCompare(b._d)).map(g=>`<tr><td>${fD(g._d)}</td><td>${esc(g.descripcion)}</td><td><span class="tag tg">${(g.cat||'').slice(0,5)}</span></td><td>${$m(g.amount)}</td></tr>`).join('')||`<tr><td colspan="4" class="empty-row">Sin gastos</td></tr>`;
+  const _compraIdsMes=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));
+  const gsRows=gastosMes.filter(g=>!_compraIdsMes.has(g.id)).sort((a,b)=>a._d.localeCompare(b._d)).map(g=>`<tr><td>${fD(g._d)}</td><td>${esc(g.descripcion)}</td><td><span class="tag tg">${(g.cat||'').slice(0,5)}</span></td><td>${$m(g.amount)}</td></tr>`).join('')||`<tr><td colspan="4" class="empty-row">Sin gastos operativos</td></tr>`;
   const comprasMes=S.co.filter(c=>c.day.startsWith(rMonth)).map(c=>`<tr><td>${fD(c.day)}</td><td>${esc(c.proveedor)}</td><td><span class="tag to">compra</span></td><td>${$m(c.total)}</td></tr>`).join('');
   return`
   <div class="mtabs">${mthTabs}</div>
   <div class="kpis t3">
     <div class="kc hi" onclick="toggleDetail('det-vm')" style="cursor:pointer"><div class="kl">Ventas ▾</div><div class="kv a">${$m(tv)}</div><div class="kh">click para ver</div></div>
-    <div class="kc" onclick="toggleDetail('det-gm')" style="cursor:pointer"><div class="kl">Gastos ▾</div><div class="kv r">${$m(tg)}</div><div class="kh">click para ver</div></div>
+    <div class="kc" onclick="toggleDetail('det-gm')" style="cursor:pointer"><div class="kl">Gastos op. ▾</div><div class="kv r">${$m(tg)}</div><div class="kh">${tCompras>0?'+ compras '+$m(tCompras):'click para ver'}</div></div>
     <div class="kc"><div class="kl">Resultado</div><div class="kv ${resultado>=0?'g':'r'}">${$m(resultado)}</div></div>
   </div>
   <div id="det-vm" style="display:none">
     <div class="tbk"><div class="tt">Ventas por grupo — ${fM(rMonth)}</div><table><thead><tr><th>Grupo</th><th>Cantidad</th><th>Total</th><th>Efectivo</th><th>Transf.</th></tr></thead><tbody>${bgRows}</tbody></table></div>
   </div>
   <div id="det-gm" style="display:none">
-    <div class="tbk"><div class="tt">Gastos operativos — ${fM(rMonth)}</div><table><thead><tr><th>Fecha</th><th>Descripción</th><th>Cat.</th><th>Monto</th></tr></thead><tbody>${gsRows}</tbody></table></div>
-    ${comprasMes?`<div class="tbk"><div class="tt">Compras del mes</div><table><thead><tr><th>Fecha</th><th>Proveedor</th><th>Tipo</th><th>Total</th></tr></thead><tbody>${comprasMes}</tbody></table></div>`:''}
+    ${tg>0?`<div class="tbk"><div class="tt">Gastos operativos — ${fM(rMonth)}</div><table><thead><tr><th>Fecha</th><th>Descripción</th><th>Cat.</th><th>Monto</th></tr></thead><tbody>${gsRows}</tbody></table></div>`:''}
+    ${comprasMes?`<div class="tbk"><div class="tt">Compras del mes — ${fM(rMonth)}</div><table><thead><tr><th>Fecha</th><th>Proveedor</th><th>Tipo</th><th>Total</th></tr></thead><tbody>${comprasMes}</tbody></table></div>`:''}
+    ${!tg&&!comprasMes?`<div style="font-size:11px;color:var(--tx3);font-family:var(--mo);padding:8px 0">Sin gastos ni compras</div>`:''}
   </div>
   <div class="kpis t3">
     <div class="kc"><div class="kl">Ef. ventas</div><div class="kv g" style="font-size:14px">${$m(tvEf)}</div></div>
@@ -812,17 +847,18 @@ function rRepAnual(yr){
 }
 
 function rRepFin(mthTabs){
-  const{tv,tvEf,tvTr,tg,byG,ingEf,ingTr,egEf,egTr,ingTotal,egTotal,resultado}=mData(rMonth);
+  const{tv,tvEf,tvTr,tg,tCompras,byG,ingEf,ingTr,egEf,egTr,ingTotal,egTotal,resultado}=mData(rMonth);
   const ingresoTotal=tv+ingTotal;const margen=ingresoTotal>0?Math.round((resultado/ingresoTotal)*100):0;
   const margenCol=margen>30?'var(--gn)':margen>10?'var(--ac)':'var(--rd)';
-  const catGas={};Object.entries(S.ga).filter(([d])=>d.startsWith(rMonth)).flatMap(([,g])=>g).forEach(g=>{catGas[g.cat]=(catGas[g.cat]||0)+g.amount});
+  const _compraIdsFin=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));
+  const catGas={};Object.entries(S.ga).filter(([d])=>d.startsWith(rMonth)).flatMap(([,g])=>g).filter(g=>!_compraIdsFin.has(g.id)).forEach(g=>{catGas[g.cat]=(catGas[g.cat]||0)+g.amount});
   const catRows=Object.entries(catGas).sort((a,b)=>b[1]-a[1]).map(([c,v])=>`<tr><td>${c}</td><td style="font-family:var(--mo)">${$m(v)}</td><td style="font-family:var(--mo);color:var(--tx3)">${Math.round(tg>0?(v/tg)*100:0)}%</td></tr>`).join('')||`<tr><td colspan="3" class="empty-row">Sin gastos</td></tr>`;
   return`
   <div class="mtabs">${mthTabs}</div>
-  <div class="kpis t3"><div class="kc hi"><div class="kl">Ingresos totales</div><div class="kv a">${$m(ingresoTotal)}</div><div class="kh">ventas + extra</div></div><div class="kc"><div class="kl">Gastos</div><div class="kv r">${$m(tg)}</div></div><div class="kc"><div class="kl">Resultado</div><div class="kv ${resultado>=0?'g':'r'}">${$m(resultado)}</div></div></div>
+  <div class="kpis t3"><div class="kc hi"><div class="kl">Ingresos totales</div><div class="kv a">${$m(ingresoTotal)}</div><div class="kh">ventas + extra</div></div><div class="kc"><div class="kl">Gastos op.</div><div class="kv r">${$m(tg)}</div><div class="kh" style="font-size:9px">compras: ${$m(tCompras)}</div></div><div class="kc"><div class="kl">Resultado</div><div class="kv ${resultado>=0?'g':'r'}">${$m(resultado)}</div></div></div>
   <div class="kpis t3"><div class="kc"><div class="kl">Margen</div><div class="kv" style="color:${margenCol}">${margen}%</div></div><div class="kc"><div class="kl">Efectivo total</div><div class="kv g" style="font-size:14px">${$m(tvEf+ingEf-egEf)}</div></div><div class="kc"><div class="kl">Digital total</div><div class="kv b" style="font-size:14px">${$m(tvTr+ingTr-egTr)}</div></div></div>
   ${ingTotal>0||egTotal>0?`<div class="blk"><div class="bt">Movimientos de caja del período</div><div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--br)"><span style="font-size:11px;color:var(--tx2)">Ingresos extra</span><span style="font-family:var(--mo);color:var(--gn)">${$m(ingTotal)}</span></div><div style="display:flex;justify-content:space-between;padding:5px 0"><span style="font-size:11px;color:var(--tx2)">Egresos extra</span><span style="font-family:var(--mo);color:var(--rd)">${$m(egTotal)}</span></div></div>`:''}
-  <div class="tbk"><div class="tt">Gastos por categoría</div><table><thead><tr><th>Categoría</th><th>Monto</th><th>%</th></tr></thead><tbody>${catRows}</tbody></table></div>
+  <div class="tbk"><div class="tt">Gastos operativos por categoría</div><table><thead><tr><th>Categoría</th><th>Monto</th><th>%</th></tr></thead><tbody>${catRows}</tbody></table></div>
   <button class="btn btng" onclick="exportExcel()" style="width:100%;margin-top:6px">⬇ Exportar todo a Excel</button>`;
 }
 

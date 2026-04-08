@@ -73,7 +73,7 @@ function upPD(){const el=document.getElementById('pin-display');if(el)el.textCon
 async function pinOk(){
   if(!pinBuf){document.getElementById('pin-error').textContent='Ingresá tu PIN';return;}
   let usr=S.us.find(u=>u.rol===loginRol&&u.pin===pinBuf&&u.activo!==false);
-  if(!usr){if(loginRol==='Licha'&&pinBuf==='1408')usr={id:'usr_dueno',nombre:'Dueño',rol:'dueno'};else if(loginRol==='empleado'&&pinBuf==='0000')usr={id:'usr_empleado',nombre:'Empleado',rol:'empleado'};}
+  if(!usr){if(loginRol==='dueno'&&pinBuf==='1234')usr={id:'usr_dueno',nombre:'Dueño',rol:'dueno'};else if(loginRol==='empleado'&&pinBuf==='0000')usr={id:'usr_empleado',nombre:'Empleado',rol:'empleado'};}
   if(!usr){document.getElementById('pin-error').textContent='PIN incorrecto';pinBuf='';upPD();return;}
   sesion={id:usr.id,nombre:usr.nombre,rol:usr.rol};LC.s('sesion',sesion);
   document.getElementById('login-screen').style.display='none';
@@ -293,7 +293,14 @@ function rCaja(){
       <div class="fl"><label>Retiro del día $</label><input type="number" id="cierre-retiro" placeholder="0" value="${cierreHoy?.retiro||0}" oninput="calcCierre()"></div>
       <div class="fl"><label>Queda en caja</label><input type="text" id="cierre-saldo" readonly style="color:var(--gn);font-size:15px;font-weight:600"></div>
     </div>
-    <div style="font-size:10px;color:var(--tx3);font-family:var(--mo);margin:5px 0 10px">El saldo pasa como fondo del día siguiente (editable)</div>
+    ${sesion?.rol==='dueno'?`
+    <div style="display:flex;align-items:center;gap:8px;margin:6px 0 10px;padding:7px 10px;background:var(--sf2);border-radius:7px;border:1px solid var(--br)">
+      <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;font-family:var(--mo);color:var(--tx2)">
+        <input type="checkbox" id="cierre-editar-fondo" style="width:auto;accent-color:var(--ac)" onchange="toggleFondoEdit()"> Editar fondo siguiente manualmente
+      </label>
+      <input type="number" id="cierre-fondo-manual" placeholder="${$m(fondoInicial)}" style="display:none;max-width:110px;font-size:12px" value="${S.cierres?.[day]?.fondo_manual??''}">
+    </div>`:''}
+    <div style="font-size:10px;color:var(--tx3);font-family:var(--mo);margin:0 0 10px">El saldo pasa como fondo del día siguiente</div>
     <div style="background:var(--sf2);border-radius:8px;padding:10px;margin-bottom:10px;border:1px solid var(--br)">
       <div style="font-size:9px;color:var(--tx2);font-family:var(--mo);margin-bottom:7px;letter-spacing:.5px">CUENTA DEL DÍA — EFECTIVO</div>
       <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Fondo inicial</span><span style="font-family:var(--mo);color:var(--gn)">+${$m(fondoInicial)}</span></div>
@@ -439,22 +446,22 @@ function calcCierre(){
     if(difEl){const dif=total-deberia;difEl.textContent=(dif>=0?'+':'')+$m(dif);difEl.style.color=Math.abs(dif)<50?'var(--gn)':dif>0?'var(--ac)':'var(--rd)';}
   }
 }
+function toggleFondoEdit(){
+  const cb=document.getElementById('cierre-editar-fondo'),inp=document.getElementById('cierre-fondo-manual');
+  if(inp)inp.style.display=cb?.checked?'block':'none';
+}
 function saveCierre(){
   let total=0;const detalle={};
   BILLETES.forEach(b=>{const q=parseInt(document.getElementById('bill_'+b)?.value)||0;detalle[b]=q;total+=q*b;});
   const retiro=parseFloat(document.getElementById('cierre-retiro')?.value)||0;
-  const saldo=Math.max(0,total-retiro);
+  const editarFondo=document.getElementById('cierre-editar-fondo')?.checked;
+  const fondoManualVal=parseFloat(document.getElementById('cierre-fondo-manual')?.value);
+  const saldoAuto=Math.max(0,total-retiro);
+  const saldo=editarFondo&&!isNaN(fondoManualVal)?fondoManualVal:saldoAuto;
   if(total===0)return alert('Contá al menos un billete');
   if(!S.cierres)S.cierres={};
-  S.cierres[day]={total_contado:total,detalle,retiro,saldo_siguiente:saldo,time:arTime()};
-  if(retiro>0){
-    const existing=(S.caja[day]||[]).find(m=>m.descripcion==='Retiro cierre de caja');
-    if(!existing){
-      const row={id:uid(),day,tipo:'egreso',descripcion:'Retiro cierre de caja',metodo:'efectivo',monto:retiro,time:arTime()};
-      if(!S.caja[day])S.caja[day]=[];S.caja[day].push(row);
-      if(online)sbUp('caja_movimientos',row).catch(()=>{});
-    }
-  }
+  S.cierres[day]={total_contado:total,detalle,retiro,saldo_siguiente:saldo,fondo_manual:editarFondo?saldo:undefined,time:arTime()};
+  // El retiro NO genera movimiento de caja — solo queda registrado en el cierre
   save();render();toast('Cierre guardado ✓ — Fondo siguiente: '+$m(saldo));
 }
 
@@ -839,7 +846,7 @@ function rRepDia(){
   <div style="font-size:11px;color:var(--tx2);font-family:var(--mo);margin-bottom:10px">📅 ${fDL(day)}</div>
   <div class="kpis t3">
     <div class="kc hi" onclick="toggleDetail('det-vd')" style="cursor:pointer"><div class="kl">Ventas ▾</div><div class="kv a">${$m(tv)}</div><div class="kh">${Object.keys(byTicket).length} tickets</div></div>
-    <div class="kc" onclick="toggleDetail('det-gd')" style="cursor:pointer"><div class="kl">Gastos op. ▾</div><div class="kv r">${$m(tg)}</div><div class="kh">${tCompras>0?'+ compras '+$m(tCompras):'click para ver'}</div></div>
+    <div class="kc" onclick="toggleDetail('det-gd')" style="cursor:pointer"><div class="kl">Gastos ▾</div><div class="kv r">${$m(tg+tCompras)}</div><div class="kh" style="color:var(--tx3)">op. ${$m(tg)} · comp. ${$m(tCompras)}</div></div>
     <div class="kc"><div class="kl">Resultado</div><div class="kv ${resultado>=0?'g':'r'}">${$m(resultado)}</div></div>
   </div>
   <div id="det-vd" style="display:none">
@@ -869,7 +876,7 @@ function rRepMes(mthTabs){
   <div class="mtabs">${mthTabs}</div>
   <div class="kpis t3">
     <div class="kc hi" onclick="toggleDetail('det-vm')" style="cursor:pointer"><div class="kl">Ventas ▾</div><div class="kv a">${$m(tv)}</div><div class="kh">click para ver</div></div>
-    <div class="kc" onclick="toggleDetail('det-gm')" style="cursor:pointer"><div class="kl">Gastos op. ▾</div><div class="kv r">${$m(tg)}</div><div class="kh">${tCompras>0?'+ compras '+$m(tCompras):'click para ver'}</div></div>
+    <div class="kc" onclick="toggleDetail('det-gm')" style="cursor:pointer"><div class="kl">Gastos ▾</div><div class="kv r">${$m(tg+tCompras)}</div><div class="kh" style="color:var(--tx3)">op. ${$m(tg)} · comp. ${$m(tCompras)}</div></div>
     <div class="kc"><div class="kl">Resultado</div><div class="kv ${resultado>=0?'g':'r'}">${$m(resultado)}</div></div>
   </div>
   <div id="det-vm" style="display:none">

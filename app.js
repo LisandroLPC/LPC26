@@ -24,7 +24,8 @@ let S={
       {id:'credito_1c',label:'Tarjeta crédito (1 cuota)',pct:4.00},
       {id:'credito_3c',label:'Tarjeta crédito (3 cuotas)',pct:8.50},
       {id:'transferencia',label:'Transferencia bancaria',pct:0},
-    ]
+    ],
+    gasCats:['Alquiler','Servicios','Personal','Embalaje','Limpieza','Comisiones digitales','Otros'],
   },
 };
 
@@ -153,17 +154,19 @@ function rCaja(){
   // ventas del dia agrupadas por ticket_id
   const byTicket={};
   vs.forEach(v=>{const tk=v.ticket_id||v.id;if(!byTicket[tk])byTicket[tk]={items:[],total:0,pago:'',time:v.time||''};byTicket[tk].items.push(v);byTicket[tk].total+=v.total;byTicket[tk].pago=v.pago||'';});
-  const vRows=Object.entries(byTicket).length?Object.entries(byTicket).sort((a,b)=>a[1].time.localeCompare(b[1].time)).map(([tid,tk])=>{
+  const ticketsSorted=Object.entries(byTicket).sort((a,b)=>a[1].time.localeCompare(b[1].time));
+  const vRows=ticketsSorted.length?ticketsSorted.map(([tid,tk],idx)=>{
     const itemList=tk.items.map(v=>{const vr=S.vr.find(x=>x.id===v.variant_id),gr=S.sg.find(x=>x.id===v.group_id);return`<div style="font-size:10px;color:var(--tx3);padding:1px 0">${esc(gr?gr.name:'–')}${vr?' › '+esc(vr.name):''} ×${v.qty} = ${$m(v.total)}</div>`;}).join('');
     const pagoTag=tk.pago==='mixto'?`<span class="tag tp">mix</span>`:`<span class="tag tv">${(tk.pago||'').slice(0,3)}</span>`;
     return`<tr>
+      <td style="font-family:var(--mo);color:var(--tx3);font-size:11px">#${idx+1}</td>
       <td>${tk.time}</td>
       <td><div>${itemList}</div></td>
       <td style="font-weight:500">${$m(tk.total)}</td>
       <td>${pagoTag}</td>
       <td><button class="dbtn" onclick="delTicket('${tid}')">✕</button></td>
     </tr>`;
-  }).join(''):`<tr><td colspan="5" class="empty-row">Sin ventas</td></tr>`;
+  }).join(''):`<tr><td colspan="6" class="empty-row">Sin ventas</td></tr>`;
 
   const compraGastoIds=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));
   const gasOp=dG().filter(g=>!compraGastoIds.has(g.id));
@@ -231,11 +234,12 @@ function rCaja(){
       </select>
     </div>
     <button class="btn btnp" onclick="cerrarTicket()" style="width:100%">✓ Cerrar ticket</button>
+    <button class="btn" onclick="cancelarTicket()" style="width:100%;margin-top:6px;background:var(--sf2);color:var(--rd);border-color:rgba(248,113,113,.4)">✕ Cancelar venta</button>
     `:'<div style="font-size:11px;color:var(--tx3);font-family:var(--mo);padding:6px 0">Agregá ítems para armar el ticket</div>'}
   </div>
 
   <div class="tbk"><div class="tt">Ventas del día (por ticket)</div>
-    <table><thead><tr><th>Hora</th><th>Ítems</th><th>Total</th><th>Pago</th><th></th></tr></thead>
+    <table><thead><tr><th>#</th><th>Hora</th><th>Ítems</th><th>Total</th><th>Pago</th><th></th></tr></thead>
     <tbody>${vRows}</tbody></table>
   </div>
 
@@ -244,7 +248,7 @@ function rCaja(){
     <div class="fr">
       <div class="fl" style="flex:2"><label>Descripción</label><input type="text" id="g-d" placeholder="Ej: Alquiler, luz, retiro personal..."></div>
       <div class="fl"><label>Categoría</label>
-        <select id="g-c"><option>Alquiler</option><option>Servicios</option><option>Personal</option><option>Embalaje</option><option>Limpieza</option><option>Otros</option></select>
+        <select id="g-c">${(S.cfg.gasCats||[]).map(c=>`<option>${esc(c)}</option>`).join('')}</select>
       </div>
     </div>
     <div class="fr">
@@ -353,6 +357,7 @@ function addTKItem(){
   render();
 }
 function rmTKItem(i){ticketItems.splice(i,1);render();}
+function cancelarTicket(){if(!ticketItems.length)return;if(!confirm('¿Cancelar el ticket en proceso?'))return;ticketItems=[];pagoSeleccionado='Efectivo';render();}
 function selPago(tipo){
   pagoSeleccionado=tipo;
   const ef=document.getElementById('pago-btn-ef'),tr=document.getElementById('pago-btn-tr'),mix=document.getElementById('pago-btn-mix');
@@ -478,20 +483,28 @@ function saveCierre(){
 /* Gastos */
 async function addGa(){const d2=document.getElementById('g-d').value.trim(),c=document.getElementById('g-c').value,a=parseFloat(document.getElementById('g-a').value)||0,met=document.getElementById('g-met')?.value||'efectivo';if(!d2||!a)return alert('Completá descripción y monto');const row={id:uid(),day,descripcion:d2,cat:c,amount:a,metodo:met,time:arTime()};if(!S.ga[day])S.ga[day]=[];S.ga[day].push(row);save();render();if(online){sync('busy','guardando...');try{await sbUp('gastos',row);sync('ok','guardado')}catch(e){sync('err','error')}}}
 async function delGa(id){S.ga[day]=(S.ga[day]||[]).filter(x=>x.id!==id);save();render();if(online){try{await sbDel('gastos',id)}catch(e){}}}
+function addGasCat(){const n=document.getElementById('gascat-n')?.value.trim();if(!n)return;if((S.cfg.gasCats||[]).includes(n))return alert('Ya existe');if(!S.cfg.gasCats)S.cfg.gasCats=[];S.cfg.gasCats.push(n);save();render();toast('Categoría agregada ✓');}
+function delGasCat(i){if(!confirm('¿Eliminar esta categoría?'))return;S.cfg.gasCats.splice(i,1);save();render();}
 function rGastos(){
   const gs=dG(),tot=gs.reduce((s,g)=>s+g.amount,0);
   const cats={};gs.forEach(g=>{cats[g.cat]=(cats[g.cat]||0)+g.amount});
   const cH=Object.entries(cats).sort((a,b)=>b[1]-a[1]).map(([c,v])=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--br)"><span style="font-size:11px;color:var(--tx2)">${c}</span><span style="font-family:var(--mo);font-size:12px">${$m(v)}</span></div>`).join('');
+  const catOpts=(S.cfg.gasCats||[]).map(c=>`<option>${esc(c)}</option>`).join('');
   const rows=gs.length?gs.map(g=>`<tr><td>${g.time||''}</td><td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(g.descripcion)}</td><td><span class="tag tg">${(g.cat||'').slice(0,5)}</span></td><td>${$m(g.amount)}</td><td><button class="dbtn" onclick="delGa('${g.id}')">✕</button></td></tr>`).join(''):`<tr><td colspan="5" class="empty-row">Sin gastos</td></tr>`;
+  const catListRows=(S.cfg.gasCats||[]).map((c,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--br)"><span style="font-size:11px">${esc(c)}</span><button class="dbtn" onclick="delGasCat(${i})">✕</button></div>`).join('');
   return`<div class="kpis"><div class="kc hi"><div class="kl">Total gastos</div><div class="kv r">${$m(tot)}</div><div class="kh">${gs.length} registros</div></div></div>
   ${Object.keys(cats).length?`<div class="blk"><div class="bt">Por categoría</div>${cH}</div>`:''}
   <div class="blk"><div class="bt">Registrar gasto</div>
-    <div class="fr"><div class="fl" style="flex:2"><label>Descripción</label><input type="text" id="g-d" placeholder="Ej: Gas, bolsas, personal..."></div><div class="fl"><label>Categoría</label><select id="g-c"><option>Alquiler</option><option>Servicios</option><option>Personal</option><option>Embalaje</option><option>Limpieza</option><option>Otros</option></select></div></div>
+    <div class="fr"><div class="fl" style="flex:2"><label>Descripción</label><input type="text" id="g-d" placeholder="Ej: Gas, bolsas, personal..."></div><div class="fl"><label>Categoría</label><select id="g-c">${catOpts}</select></div></div>
     <div class="fr"><div class="fl"><label>Monto $</label><input type="number" id="g-a" placeholder="0"></div><button class="btn btnp" onclick="addGa()" style="align-self:flex-end">+ Gasto</button></div>
   </div>
   <div class="tbk"><div class="tt">Gastos del día</div>
     <table><thead><tr><th>Hora</th><th>Descripción</th><th>Cat.</th><th>Monto</th><th></th></tr></thead><tbody>${rows}</tbody></table>
-  </div>`;
+  </div>
+  ${sesion?.rol==='dueno'?`<div class="blk"><div class="bt">Gestionar categorías de gastos</div>
+    <div style="margin-bottom:10px">${catListRows||'<div style="font-size:11px;color:var(--tx3)">Sin categorías</div>'}</div>
+    <div class="fr"><div class="fl" style="flex:2"><label>Nueva categoría</label><input type="text" id="gascat-n" placeholder="Ej: Mantenimiento, Publicidad..."></div><button class="btn btnp" onclick="addGasCat()" style="align-self:flex-end">+ Agregar</button></div>
+  </div>`:''}`;
 }
 
 /* ══ STOCK ══════════════════════════════════════════════════════ */
@@ -721,14 +734,18 @@ function rCompras(){
     <div id="cp-items-list"></div>
     <div class="sep"></div>
     <div style="font-size:9px;color:var(--tx2);font-family:var(--mo);margin-bottom:7px">AGREGAR ARTÍCULO</div>
-    <div class="fr"><div class="fl" style="flex:2"><label>Descripción</label><input type="text" id="ci-desc" placeholder="Ej: Cajón pollo, Pan rallado..."></div><div class="fl"><label>Actualiza</label><select id="ci-ref">${allOpts}</select></div></div>
-    <div class="fr"><div class="fl" style="max-width:70px"><label>Cant. compra</label><input type="number" id="ci-qtyc" placeholder="4" min="0.001" step="0.001"></div><div class="fl" style="max-width:90px"><label>Unidad compra</label><input type="text" id="ci-uc" placeholder="cajón, bolsa..."></div><div class="fl" style="max-width:70px"><label>Cant. real</label><input type="number" id="ci-qtyr" placeholder="74" min="0.001" step="0.001"></div><div class="fl" style="max-width:80px"><label>Precio total $</label><input type="number" id="ci-precio" placeholder="0" oninput="calcCostoUnitario()"></div><button class="btn" onclick="addCompraItem()" style="align-self:flex-end;padding:6px 10px;font-size:11px">+</button></div>
-    <div style="display:flex;gap:16px;margin-top:6px;flex-wrap:wrap"><label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;font-family:var(--mo)"><input type="checkbox" id="ci-upd-stock" checked style="width:auto;accent-color:var(--ac)"> Actualizar stock</label><label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;font-family:var(--mo)"><input type="checkbox" id="ci-upd-cost" checked style="width:auto;accent-color:var(--ac)"> Actualizar costo/u</label></div>
+    <div class="fr"><div class="fl" style="flex:2"><label>Descripción</label><input type="text" id="ci-desc" placeholder="Ej: Cajón pollo, Pan rallado..."></div><div class="fl" style="max-width:110px"><label>Actualiza</label><select id="ci-tipo" onchange="onCiTipo()""><option value="sgv">Stock de venta</option><option value="ins">Insumo</option><option value="otro">Ninguno</option></select></div></div>
+    <div class="fr" id="ci-item-row"><div class="fl"><label>Artículo</label><select id="ci-ref">${sgVOpts||'<option disabled>Sin grupos</option>'}</select></div></div>
+    <div style="display:flex;gap:10px;margin-top:4px;flex-wrap:wrap">
+      <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;font-family:var(--mo)"><input type="checkbox" id="ci-upd-stock" checked style="width:auto;accent-color:var(--ac)"> Actualizar stock</label>
+      <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;font-family:var(--mo)"><input type="checkbox" id="ci-upd-cost" checked style="width:auto;accent-color:var(--ac)"> Actualizar costo/u</label>
+    </div>
+    <div class="fr" style="margin-top:6px"><div class="fl" style="max-width:70px"><label>Cant. compra</label><input type="number" id="ci-qtyc" placeholder="4" min="0.001" step="0.001"></div><div class="fl" style="max-width:90px"><label>Unidad compra</label><input type="text" id="ci-uc" placeholder="cajón, bolsa..."></div><div class="fl" style="max-width:70px"><label>Cant. real</label><input type="number" id="ci-qtyr" placeholder="74" min="0.001" step="0.001"></div><div class="fl" style="max-width:80px"><label>Precio total $</label><input type="number" id="ci-precio" placeholder="0" oninput="calcCostoUnitario()"></div><button class="btn" onclick="addCompraItem()" style="align-self:flex-end;padding:6px 10px;font-size:11px">+</button></div>
     <div style="font-size:9px;color:var(--tx3);font-family:var(--mo);margin-top:3px" id="costo-preview"></div>
     <div style="font-size:9px;color:var(--tx3);font-family:var(--mo)">Cant. real = kg reales. Ej: 4 cajones → 74kg → costo/kg = total ÷ 74</div>
   </div>
   ${sgV().length?`<div class="blk"><div class="bt">Propagar costo/kg a grupos de stock</div>
-    <div style="font-size:10px;color:var(--tx2);font-family:var(--mo);margin-bottom:8px">Marcá los grupos de pollo para actualizar su costo/kg con esta compra</div>
+    <div style="font-size:10px;color:var(--tx2);font-family:var(--mo);margin-bottom:8px">Marcá los grupos que deben actualizar su costo/kg con esta compra</div>
     <div>${propOpts}</div>
     <button class="btn" onclick="selAllProp()" style="font-size:11px;padding:4px 10px;margin-top:8px">Seleccionar todos</button>
   </div>`:''}
@@ -736,7 +753,22 @@ function rCompras(){
   <div class="sh">Compras de hoy</div>${cards}`;
 }
 function calcCpTotal(){const ef=parseFloat(document.getElementById('cp-ef')?.value)||0,tr=parseFloat(document.getElementById('cp-tr')?.value)||0;const tot=document.getElementById('cp-tot');if(tot)tot.value=ef+tr>0?$m(ef+tr):'';}
-function calcCostoUnitario(){const precio=parseFloat(document.getElementById('ci-precio')?.value)||0,qtyR=parseFloat(document.getElementById('ci-qtyr')?.value)||0,qtyC=parseFloat(document.getElementById('ci-qtyc')?.value)||0,prev=document.getElementById('costo-preview');if(!prev)return;if(precio&&(qtyR||qtyC)){const base=qtyR||qtyC,costo=precio/base,refEl=document.getElementById('ci-ref'),unit=refEl?.options[refEl.selectedIndex]?.dataset?.u||'kg';prev.textContent=`→ Costo calculado: ${$d2(costo)}/${unit}`;prev.style.color='var(--ac)';}else{prev.textContent='';}}
+function onCiTipo(){
+  const tipo=document.getElementById('ci-tipo')?.value;
+  const refEl=document.getElementById('ci-ref');
+  const row=document.getElementById('ci-item-row');
+  if(!refEl)return;
+  if(tipo==='sgv'){
+    if(row)row.style.display='';
+    refEl.innerHTML=sgV().map(g=>`<option value="sgv_${g.id}" data-u="${g.unit||'kg'}">${esc(g.name)} (${g.unit||'kg'})</option>`).join('')||'<option disabled>Sin grupos</option>';
+  }else if(tipo==='ins'){
+    if(row)row.style.display='';
+    refEl.innerHTML=S.ins.map(i=>`<option value="ins_${i.id}" data-u="${i.unit}">${esc(i.name)} (${i.unit})</option>`).join('')||'<option disabled>Sin insumos</option>';
+  }else{
+    if(row)row.style.display='none';
+  }
+  calcCostoUnitario();
+}{const precio=parseFloat(document.getElementById('ci-precio')?.value)||0,qtyR=parseFloat(document.getElementById('ci-qtyr')?.value)||0,qtyC=parseFloat(document.getElementById('ci-qtyc')?.value)||0,prev=document.getElementById('costo-preview');if(!prev)return;if(precio&&(qtyR||qtyC)){const base=qtyR||qtyC,costo=precio/base,refEl=document.getElementById('ci-ref'),unit=refEl?.options[refEl.selectedIndex]?.dataset?.u||'kg';prev.textContent=`→ Costo calculado: ${$d2(costo)}/${unit}`;prev.style.color='var(--ac)';}else{prev.textContent='';}}
 function selAllProp(){sgV().forEach(g=>{const cb=document.getElementById('prop_'+g.id);if(cb)cb.checked=true;});}
 function renderCompraItems(){
   const list=document.getElementById('cp-items-list');if(!list)return;
@@ -746,12 +778,14 @@ function renderCompraItems(){
     +`<div style="text-align:right;font-size:12px;font-family:var(--mo);color:var(--ac);padding:5px 0">Total artículos: ${$m(tot)}</div>`;
 }
 function addCompraItem(){
-  const desc=document.getElementById('ci-desc')?.value.trim(),refEl=document.getElementById('ci-ref'),refOpt=refEl?.options[refEl.selectedIndex],refVal=refEl?.value;
+  const desc=document.getElementById('ci-desc')?.value.trim();
+  const tipoEl=document.getElementById('ci-tipo'),refEl=document.getElementById('ci-ref'),refOpt=refEl?.options[refEl.selectedIndex],refVal=refEl?.value;
+  const tipo=tipoEl?.value||'sgv';
   const qtyC=parseFloat(document.getElementById('ci-qtyc')?.value)||0,uc=document.getElementById('ci-uc')?.value.trim()||'unidad',qtyR=parseFloat(document.getElementById('ci-qtyr')?.value)||0,precio=parseFloat(document.getElementById('ci-precio')?.value)||0;
   const updStock=document.getElementById('ci-upd-stock')?.checked!==false,updCost=document.getElementById('ci-upd-cost')?.checked!==false;
   if(!desc||!qtyC||!precio)return alert('Completá descripción, cantidad y precio');
   const unitReal=refOpt?.dataset?.u||'kg',base=qtyR||qtyC,costCalc=precio/base;
-  const isStock=refVal?.startsWith('sgv_'),isIns=refVal?.startsWith('ins_'),ref_id=refVal?.replace(/^(sgv_|ins_)/,'');
+  const isStock=tipo==='sgv',isIns=tipo==='ins',ref_id=refVal?.replace(/^(sgv_|ins_)/,'')||'';
   compraItems.push({descripcion:desc,tipo_destino:isStock?'stock_venta':isIns?'insumo':'otro',ref_id,qty_compra:qtyC,unit_compra:uc,qty_real:qtyR||qtyC,unit_real:unitReal,precio_total:precio,cost_unit_calculado:costCalc,upd_stock:updStock,upd_cost:updCost});
   document.getElementById('ci-desc').value='';document.getElementById('ci-qtyc').value='';document.getElementById('ci-qtyr').value='';document.getElementById('ci-precio').value='';
   const prev=document.getElementById('costo-preview');if(prev)prev.textContent='';renderCompraItems();

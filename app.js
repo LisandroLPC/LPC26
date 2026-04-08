@@ -174,8 +174,8 @@ function rCaja(){
 
   const prevDay=getPrevDay(day);
   const cierrePrev=S.cierres?.[prevDay];
-  const fondoInicial=cierrePrev?.saldo_siguiente||0;
   const cierreHoy=S.cierres?.[day];
+  const fondoInicial=cierreHoy?.fondo_inicial_manual??cierrePrev?.saldo_siguiente??0;
 
   return`
   <div class="kpis">
@@ -277,6 +277,14 @@ function rCaja(){
   <!-- CIERRE DE CAJA -->
   <div class="blk" style="border-color:rgba(232,197,71,.5)">
     <div class="bt">Cierre de caja — efectivo</div>
+    ${sesion?.rol==='dueno'?`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:7px 10px;background:var(--sf2);border-radius:7px;border:1px solid var(--br)">
+      <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;font-family:var(--mo);color:var(--tx2);white-space:nowrap">
+        <input type="checkbox" id="cierre-editar-fondo" style="width:auto;accent-color:var(--ac)" onchange="toggleFondoEdit()"> Fondo inicial del día:
+      </label>
+      <span id="cierre-fondo-display" style="font-family:var(--mo);font-size:12px;color:var(--gn)">${$m(fondoInicial)}</span>
+      <input type="number" id="cierre-fondo-manual" placeholder="0" style="display:none;max-width:100px;font-size:12px" value="${S.cierres?.[day]?.fondo_inicial_manual??fondoInicial}" oninput="calcCierre()">
+    </div>`:`<div style="font-size:10px;color:var(--tx2);font-family:var(--mo);margin-bottom:10px">Fondo inicial: <span style="color:var(--gn)">${$m(fondoInicial)}</span></div>`}
     <div style="font-size:10px;color:var(--tx2);font-family:var(--mo);margin-bottom:10px">Contá los billetes para calcular el total</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:10px">
       ${BILLETES.map(b=>`<div style="display:flex;align-items:center;gap:5px;background:var(--sf2);border-radius:5px;padding:5px 8px">
@@ -293,17 +301,10 @@ function rCaja(){
       <div class="fl"><label>Retiro del día $</label><input type="number" id="cierre-retiro" placeholder="0" value="${cierreHoy?.retiro||0}" oninput="calcCierre()"></div>
       <div class="fl"><label>Queda en caja</label><input type="text" id="cierre-saldo" readonly style="color:var(--gn);font-size:15px;font-weight:600"></div>
     </div>
-    ${sesion?.rol==='dueno'?`
-    <div style="display:flex;align-items:center;gap:8px;margin:6px 0 10px;padding:7px 10px;background:var(--sf2);border-radius:7px;border:1px solid var(--br)">
-      <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;font-family:var(--mo);color:var(--tx2)">
-        <input type="checkbox" id="cierre-editar-fondo" style="width:auto;accent-color:var(--ac)" onchange="toggleFondoEdit()"> Editar fondo siguiente manualmente
-      </label>
-      <input type="number" id="cierre-fondo-manual" placeholder="${$m(fondoInicial)}" style="display:none;max-width:110px;font-size:12px" value="${S.cierres?.[day]?.fondo_manual??''}">
-    </div>`:''}
     <div style="font-size:10px;color:var(--tx3);font-family:var(--mo);margin:0 0 10px">El saldo pasa como fondo del día siguiente</div>
     <div style="background:var(--sf2);border-radius:8px;padding:10px;margin-bottom:10px;border:1px solid var(--br)">
       <div style="font-size:9px;color:var(--tx2);font-family:var(--mo);margin-bottom:7px;letter-spacing:.5px">CUENTA DEL DÍA — EFECTIVO</div>
-      <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Fondo inicial</span><span style="font-family:var(--mo);color:var(--gn)">+${$m(fondoInicial)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Fondo inicial</span><span style="font-family:var(--mo);color:var(--gn)" id="cierre-fondo-cuenta">+${$m(fondoInicial)}</span></div>
       <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Ventas efectivo</span><span style="font-family:var(--mo);color:var(--gn)">+${$m(ef)}</span></div>
       <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Gastos en efectivo</span><span style="font-family:var(--mo);color:var(--rd)">-${$m(gaEf)}</span></div>
       <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Retiro</span><span style="font-family:var(--mo);color:var(--rd)" id="cierre-retiro-display">-${$m(cierreHoy?.retiro||0)}</span></div>
@@ -439,7 +440,14 @@ function calcCierre(){
     const vs=dV(),ef=vs.filter(v=>v.pago==='Efectivo'||v.pago_ef>0).reduce((s,v)=>s+(v.pago==='Efectivo'?v.total:(v.pago_ef||0)),0);
     const compraGastoIds=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));
     const gaEf=(S.ga[day]||[]).filter(g=>!compraGastoIds.has(g.id)&&g.metodo!=='transferencia').reduce((s,g)=>s+g.amount,0);
-    const prevDay=getPrevDay(day);const fondo=S.cierres?.[prevDay]?.saldo_siguiente||0;
+    const prevDay=getPrevDay(day);
+    const fondoBase=S.cierres?.[prevDay]?.saldo_siguiente||0;
+    const cb=document.getElementById('cierre-editar-fondo');
+    const fondoManualInp=document.getElementById('cierre-fondo-manual');
+    const fondo=cb?.checked&&fondoManualInp?( parseFloat(fondoManualInp.value)||0 ):fondoBase;
+    // actualizar la línea de fondo en la cuenta
+    const fondoCuenta=document.getElementById('cierre-fondo-cuenta');
+    if(fondoCuenta)fondoCuenta.textContent='+'+$m(fondo);
     const deberia=fondo+ef-gaEf-retiro;
     deberiaEl.textContent=$m(deberia);
     if(contEl)contEl.textContent=$m(total);
@@ -447,21 +455,23 @@ function calcCierre(){
   }
 }
 function toggleFondoEdit(){
-  const cb=document.getElementById('cierre-editar-fondo'),inp=document.getElementById('cierre-fondo-manual');
+  const cb=document.getElementById('cierre-editar-fondo');
+  const inp=document.getElementById('cierre-fondo-manual');
+  const disp=document.getElementById('cierre-fondo-display');
   if(inp)inp.style.display=cb?.checked?'block':'none';
+  if(disp)disp.style.display=cb?.checked?'none':'inline';
+  calcCierre();
 }
 function saveCierre(){
   let total=0;const detalle={};
   BILLETES.forEach(b=>{const q=parseInt(document.getElementById('bill_'+b)?.value)||0;detalle[b]=q;total+=q*b;});
   const retiro=parseFloat(document.getElementById('cierre-retiro')?.value)||0;
-  const editarFondo=document.getElementById('cierre-editar-fondo')?.checked;
-  const fondoManualVal=parseFloat(document.getElementById('cierre-fondo-manual')?.value);
-  const saldoAuto=Math.max(0,total-retiro);
-  const saldo=editarFondo&&!isNaN(fondoManualVal)?fondoManualVal:saldoAuto;
+  const saldo=Math.max(0,total-retiro);
   if(total===0)return alert('Contá al menos un billete');
+  const cb=document.getElementById('cierre-editar-fondo');
+  const fondoManualVal=cb?.checked?parseFloat(document.getElementById('cierre-fondo-manual')?.value)||0:undefined;
   if(!S.cierres)S.cierres={};
-  S.cierres[day]={total_contado:total,detalle,retiro,saldo_siguiente:saldo,fondo_manual:editarFondo?saldo:undefined,time:arTime()};
-  // El retiro NO genera movimiento de caja — solo queda registrado en el cierre
+  S.cierres[day]={total_contado:total,detalle,retiro,saldo_siguiente:saldo,fondo_inicial_manual:fondoManualVal,time:arTime()};
   save();render();toast('Cierre guardado ✓ — Fondo siguiente: '+$m(saldo));
 }
 

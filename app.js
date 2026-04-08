@@ -18,8 +18,8 @@ let S={
   cierres:LC.g('cierres')||{},
   cfg:LC.g('cfg')||{},
 };
-// Garantizar que cfg siempre tenga los campos necesarios aunque venga de localStorage sin ellos
-if(!S.cfg.mp||!S.cfg.mp.length)S.cfg.mp=[
+// Merge defaults: completar los campos que falten en cfg
+if(!S.cfg.mp||!Array.isArray(S.cfg.mp)||!S.cfg.mp.length)S.cfg.mp=[
   {id:'qr_mp',label:'QR Mercado Pago',pct:3.99},
   {id:'qr_otro',label:'QR otro medio',pct:2.50},
   {id:'debito',label:'Tarjeta débito',pct:1.10},
@@ -27,7 +27,10 @@ if(!S.cfg.mp||!S.cfg.mp.length)S.cfg.mp=[
   {id:'credito_3c',label:'Tarjeta crédito (3 cuotas)',pct:8.50},
   {id:'transferencia',label:'Transferencia bancaria',pct:0},
 ];
-if(!S.cfg.gasCats||!S.cfg.gasCats.length)S.cfg.gasCats=['Alquiler','Servicios','Personal','Embalaje','Limpieza','Comisiones digitales','Otros'];
+if(!S.cfg.gasCats||!Array.isArray(S.cfg.gasCats)||!S.cfg.gasCats.length)S.cfg.gasCats=[
+  'Alquiler','Servicios','Personal','Embalaje','Limpieza','Comisiones digitales','Otros'
+];
+LC.s('cfg',S.cfg);
 
 let tab='caja',day=arDay(),online=navigator.onLine;
 let sesion=LC.g('sesion')||null;
@@ -491,7 +494,6 @@ function rGastos(){
   const cH=Object.entries(cats).sort((a,b)=>b[1]-a[1]).map(([c,v])=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--br)"><span style="font-size:11px;color:var(--tx2)">${c}</span><span style="font-family:var(--mo);font-size:12px">${$m(v)}</span></div>`).join('');
   const catOpts=(S.cfg.gasCats||[]).map(c=>`<option>${esc(c)}</option>`).join('');
   const rows=gs.length?gs.map(g=>`<tr><td>${g.time||''}</td><td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(g.descripcion)}</td><td><span class="tag tg">${(g.cat||'').slice(0,5)}</span></td><td>${$m(g.amount)}</td><td><button class="dbtn" onclick="delGa('${g.id}')">✕</button></td></tr>`).join(''):`<tr><td colspan="5" class="empty-row">Sin gastos</td></tr>`;
-  const catListRows=(S.cfg.gasCats||[]).map((c,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--br)"><span style="font-size:11px">${esc(c)}</span><button class="dbtn" onclick="delGasCat(${i})">✕</button></div>`).join('');
   return`<div class="kpis"><div class="kc hi"><div class="kl">Total gastos</div><div class="kv r">${$m(tot)}</div><div class="kh">${gs.length} registros</div></div></div>
   ${Object.keys(cats).length?`<div class="blk"><div class="bt">Por categoría</div>${cH}</div>`:''}
   <div class="blk"><div class="bt">Registrar gasto</div>
@@ -500,11 +502,7 @@ function rGastos(){
   </div>
   <div class="tbk"><div class="tt">Gastos del día</div>
     <table><thead><tr><th>Hora</th><th>Descripción</th><th>Cat.</th><th>Monto</th><th></th></tr></thead><tbody>${rows}</tbody></table>
-  </div>
-  ${sesion?.rol==='dueno'?`<div class="blk"><div class="bt">Gestionar categorías de gastos</div>
-    <div style="margin-bottom:10px">${catListRows||'<div style="font-size:11px;color:var(--tx3)">Sin categorías</div>'}</div>
-    <div class="fr"><div class="fl" style="flex:2"><label>Nueva categoría</label><input type="text" id="gascat-n" placeholder="Ej: Mantenimiento, Publicidad..."></div><button class="btn btnp" onclick="addGasCat()" style="align-self:flex-end">+ Agregar</button></div>
-  </div>`:''}`;
+  </div>`;
 }
 
 /* ══ STOCK ══════════════════════════════════════════════════════ */
@@ -547,9 +545,18 @@ function rStock(){
     <table><thead><tr><th>Variante</th><th>Descuenta</th><th>Precio $</th><th></th></tr></thead><tbody>${vrRows||`<tr><td colspan="4" class="empty-row">Sin variantes</td></tr>`}</tbody></table>
   </div>
   ${sesion?.rol==='dueno'?`
+  <div class="sh">Categorías de gastos operativos</div>
+  <div class="blk">
+    <div style="font-size:10px;color:var(--tx2);font-family:var(--mo);margin-bottom:10px">Estas categorías aparecen al cargar un gasto operativo.</div>
+    ${(S.cfg.gasCats||[]).map((c,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--br)"><span style="font-size:12px">${esc(c)}</span><button class="dbtn" onclick="delGasCat(${i})">✕</button></div>`).join('')||'<div style="font-size:11px;color:var(--tx3);padding:4px 0">Sin categorías</div>'}
+    <div class="fr" style="margin-top:10px">
+      <div class="fl" style="flex:2"><label>Nueva categoría</label><input type="text" id="gascat-n" placeholder="Ej: Mantenimiento, Publicidad..."></div>
+      <button class="btn btnp" onclick="addGasCat()" style="align-self:flex-end">+ Agregar</button>
+    </div>
+  </div>
   <div class="sh">Configuración de comisiones digitales</div>
   <div class="blk">
-    <div style="font-size:10px;color:var(--tx2);font-family:var(--mo);margin-bottom:10px">Los porcentajes se aplican automáticamente al monto en transferencia de cada ticket. Podés editarlos según los acuerdos vigentes con cada medio de pago.</div>
+    <div style="font-size:10px;color:var(--tx2);font-family:var(--mo);margin-bottom:10px">Los porcentajes se aplican automáticamente al monto en transferencia de cada ticket.</div>
     <table style="width:100%"><thead><tr><th>Medio</th><th>% comisión</th><th></th></tr></thead><tbody>
       ${(S.cfg.mp||[]).map((m,i)=>`<tr>
         <td style="font-size:11px">${esc(m.label)}</td>

@@ -734,7 +734,7 @@ function rCompras(){
     <div id="cp-items-list"></div>
     <div class="sep"></div>
     <div style="font-size:9px;color:var(--tx2);font-family:var(--mo);margin-bottom:7px">AGREGAR ARTÍCULO</div>
-    <div class="fr"><div class="fl" style="flex:2"><label>Descripción</label><input type="text" id="ci-desc" placeholder="Ej: Cajón pollo, Pan rallado..."></div><div class="fl" style="max-width:110px"><label>Actualiza</label><select id="ci-tipo" onchange="onCiTipo()""><option value="sgv">Stock de venta</option><option value="ins">Insumo</option><option value="otro">Ninguno</option></select></div></div>
+    <div class="fr"><div class="fl" style="flex:2"><label>Descripción</label><input type="text" id="ci-desc" placeholder="Ej: Cajón pollo, Pan rallado..."></div><div class="fl" style="max-width:110px"><label>Actualiza</label><select id="ci-tipo" onchange="onCiTipo()"><option value="sgv">Stock de venta</option><option value="ins">Insumo</option><option value="otro">Ninguno</option></select></div></div>
     <div class="fr" id="ci-item-row"><div class="fl"><label>Artículo</label><select id="ci-ref">${sgVOpts||'<option disabled>Sin grupos</option>'}</select></div></div>
     <div style="display:flex;gap:10px;margin-top:4px;flex-wrap:wrap">
       <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;font-family:var(--mo)"><input type="checkbox" id="ci-upd-stock" checked style="width:auto;accent-color:var(--ac)"> Actualizar stock</label>

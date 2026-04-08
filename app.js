@@ -16,18 +16,18 @@ let S={
   el:LC.g('el')||[],eli:LC.g('eli')||[],
   ga:LC.g('ga')||{},ins:LC.g('ins')||[],
   cierres:LC.g('cierres')||{},
-  cfg:LC.g('cfg')||{
-    mp:[
-      {id:'qr_mp',label:'QR Mercado Pago',pct:3.99},
-      {id:'qr_otro',label:'QR otro medio',pct:2.50},
-      {id:'debito',label:'Tarjeta débito',pct:1.10},
-      {id:'credito_1c',label:'Tarjeta crédito (1 cuota)',pct:4.00},
-      {id:'credito_3c',label:'Tarjeta crédito (3 cuotas)',pct:8.50},
-      {id:'transferencia',label:'Transferencia bancaria',pct:0},
-    ],
-    gasCats:['Alquiler','Servicios','Personal','Embalaje','Limpieza','Comisiones digitales','Otros'],
-  },
+  cfg:LC.g('cfg')||{},
 };
+// Garantizar que cfg siempre tenga los campos necesarios aunque venga de localStorage sin ellos
+if(!S.cfg.mp||!S.cfg.mp.length)S.cfg.mp=[
+  {id:'qr_mp',label:'QR Mercado Pago',pct:3.99},
+  {id:'qr_otro',label:'QR otro medio',pct:2.50},
+  {id:'debito',label:'Tarjeta débito',pct:1.10},
+  {id:'credito_1c',label:'Tarjeta crédito (1 cuota)',pct:4.00},
+  {id:'credito_3c',label:'Tarjeta crédito (3 cuotas)',pct:8.50},
+  {id:'transferencia',label:'Transferencia bancaria',pct:0},
+];
+if(!S.cfg.gasCats||!S.cfg.gasCats.length)S.cfg.gasCats=['Alquiler','Servicios','Personal','Embalaje','Limpieza','Comisiones digitales','Otros'];
 
 let tab='caja',day=arDay(),online=navigator.onLine;
 let sesion=LC.g('sesion')||null;
@@ -216,20 +216,20 @@ function rCaja(){
     </div>
     <div style="font-size:9px;color:var(--tx2);font-family:var(--mo);margin-bottom:7px">FORMA DE PAGO</div>
     <div style="display:flex;gap:7px;margin-bottom:10px">
-      <button id="pago-btn-ef" class="pago-btn active-pago" onclick="selPago('Efectivo')" style="flex:1;padding:9px 4px;border-radius:8px;border:1.5px solid var(--gn);background:rgba(74,222,128,.12);color:var(--gn);font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sa)">💵 Efectivo</button>
-      <button id="pago-btn-tr" class="pago-btn" onclick="selPago('Transferencia')" style="flex:1;padding:9px 4px;border-radius:8px;border:1.5px solid var(--br2);background:var(--sf2);color:var(--tx2);font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sa)">📲 Transf.</button>
-      <button id="pago-btn-mix" class="pago-btn" onclick="selPago('mixto')" style="flex:1;padding:9px 4px;border-radius:8px;border:1.5px solid var(--br2);background:var(--sf2);color:var(--tx2);font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sa)">🔀 Mixto</button>
+      <button id="pago-btn-ef" onclick="selPago('Efectivo')" style="flex:1;padding:9px 4px;border-radius:8px;border:1.5px solid ${pagoSeleccionado==='Efectivo'?'var(--gn)':'var(--br2)'};background:${pagoSeleccionado==='Efectivo'?'rgba(74,222,128,.12)':'var(--sf2)'};color:${pagoSeleccionado==='Efectivo'?'var(--gn)':'var(--tx2)'};font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sa)">💵 Efectivo</button>
+      <button id="pago-btn-tr" onclick="selPago('Transferencia')" style="flex:1;padding:9px 4px;border-radius:8px;border:1.5px solid ${pagoSeleccionado==='Transferencia'?'var(--bl)':'var(--br2)'};background:${pagoSeleccionado==='Transferencia'?'rgba(96,165,250,.12)':'var(--sf2)'};color:${pagoSeleccionado==='Transferencia'?'var(--bl)':'var(--tx2)'};font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sa)">📲 Transf.</button>
+      <button id="pago-btn-mix" onclick="selPago('mixto')" style="flex:1;padding:9px 4px;border-radius:8px;border:1.5px solid ${pagoSeleccionado==='mixto'?'var(--ac)':'var(--br2)'};background:${pagoSeleccionado==='mixto'?'rgba(232,197,71,.12)':'var(--sf2)'};color:${pagoSeleccionado==='mixto'?'var(--ac)':'var(--tx2)'};font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sa)">🔀 Mixto</button>
     </div>
-    <div id="tk-mixto-fields" style="display:none">
+    <div id="tk-mixto-fields" style="display:${pagoSeleccionado==='mixto'?'block':'none'}">
       <div class="fr">
         <div class="fl"><label>Efectivo $</label><input type="number" id="tk-pago-ef" placeholder="0" oninput="calcTKVuelto()"></div>
         <div class="fl"><label>Transferencia $</label><input type="number" id="tk-pago-tr" placeholder="0" oninput="calcTKVuelto()"></div>
         <div class="fl"><label>Vuelto</label><input type="text" id="tk-vuelto" readonly style="color:var(--gn)"></div>
       </div>
     </div>
-    <div id="tk-mp-field" style="display:none;margin-bottom:8px">
+    <div id="tk-mp-field" style="display:${pagoSeleccionado!=='Efectivo'?'block':'none'};margin-bottom:8px">
       <label style="font-size:9px;color:var(--tx2);font-family:var(--mo);letter-spacing:.5px">MEDIO DE COBRO DIGITAL</label>
-      <select id="tk-mp-tipo" style="margin-top:4px;width:100%" onchange="calcTKVuelto()">
+      <select id="tk-mp-tipo" style="margin-top:4px;width:100%">
         ${(S.cfg.mp||[]).map(m=>`<option value="${m.id}" data-pct="${m.pct}">${m.label} ${m.pct>0?'('+m.pct+'%)':''}</option>`).join('')}
       </select>
     </div>

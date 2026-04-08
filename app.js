@@ -309,7 +309,7 @@ function rCaja(){
       <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Gastos en efectivo</span><span style="font-family:var(--mo);color:var(--rd)">-${$m(gaEf)}</span></div>
       <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Retiro</span><span style="font-family:var(--mo);color:var(--rd)" id="cierre-retiro-display">-${$m(cierreHoy?.retiro||0)}</span></div>
       <div style="display:flex;justify-content:space-between;padding:5px 0 3px;border-top:1px solid var(--br);margin-top:4px;font-size:12px;font-weight:600"><span>Debería haber</span><span style="font-family:var(--mo);color:var(--ac)" id="cierre-deberia">${$m(fondoInicial+ef-gaEf-(cierreHoy?.retiro||0))}</span></div>
-      <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Contado</span><span style="font-family:var(--mo)" id="cierre-contado-disp">$0</span></div>
+      <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Queda en caja</span><span style="font-family:var(--mo)" id="cierre-contado-disp">$0</span></div>
       <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;font-weight:700"><span>Diferencia</span><span style="font-family:var(--mo)" id="cierre-diferencia">—</span></div>
     </div>
     <button class="btn btnp" onclick="saveCierre()" style="width:100%">✓ Confirmar cierre</button>
@@ -450,8 +450,8 @@ function calcCierre(){
     if(fondoCuenta)fondoCuenta.textContent='+'+$m(fondo);
     const deberia=fondo+ef-gaEf-retiro;
     deberiaEl.textContent=$m(deberia);
-    if(contEl)contEl.textContent=$m(total);
-    if(difEl){const dif=total-deberia;difEl.textContent=(dif>=0?'+':'')+$m(dif);difEl.style.color=Math.abs(dif)<50?'var(--gn)':dif>0?'var(--ac)':'var(--rd)';}
+    if(contEl)contEl.textContent=$m(Math.max(0,total-retiro));
+    if(difEl){const dif=Math.max(0,total-retiro)-deberia;difEl.textContent=(dif>=0?'+':'')+$m(dif);difEl.style.color=Math.abs(dif)<50?'var(--gn)':dif>0?'var(--ac)':'var(--rd)';}
   }
 }
 function toggleFondoEdit(){

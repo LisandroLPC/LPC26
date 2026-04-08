@@ -16,6 +16,16 @@ let S={
   el:LC.g('el')||[],eli:LC.g('eli')||[],
   ga:LC.g('ga')||{},ins:LC.g('ins')||[],
   cierres:LC.g('cierres')||{},
+  cfg:LC.g('cfg')||{
+    mp:[
+      {id:'qr_mp',label:'QR Mercado Pago',pct:3.99},
+      {id:'qr_otro',label:'QR otro medio',pct:2.50},
+      {id:'debito',label:'Tarjeta débito',pct:1.10},
+      {id:'credito_1c',label:'Tarjeta crédito (1 cuota)',pct:4.00},
+      {id:'credito_3c',label:'Tarjeta crédito (3 cuotas)',pct:8.50},
+      {id:'transferencia',label:'Transferencia bancaria',pct:0},
+    ]
+  },
 };
 
 let tab='caja',day=arDay(),online=navigator.onLine;
@@ -49,7 +59,7 @@ function sgV(){return S.sg.filter(g=>g.tipo==='venta'||!g.tipo)}
 function sgP(){return S.sg.filter(g=>g.tipo==='produccion')}
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),2400)}
 function sync(s,l){const d=document.getElementById('sdot'),lb=document.getElementById('slbl');if(d){d.className='sdot '+s;lb.textContent=l}}
-function save(){LC.s('us',S.us);LC.s('sg',S.sg);LC.s('vr',S.vr);LC.s('ve',S.ve);LC.s('caja',S.caja);LC.s('co',S.co);LC.s('coi',S.coi);LC.s('ct',S.ct);LC.s('cti',S.cti);LC.s('el',S.el);LC.s('eli',S.eli);LC.s('ga',S.ga);LC.s('ins',S.ins);LC.s('cierres',S.cierres);}
+function save(){LC.s('us',S.us);LC.s('sg',S.sg);LC.s('vr',S.vr);LC.s('ve',S.ve);LC.s('caja',S.caja);LC.s('co',S.co);LC.s('coi',S.coi);LC.s('ct',S.ct);LC.s('cti',S.cti);LC.s('el',S.el);LC.s('eli',S.eli);LC.s('ga',S.ga);LC.s('ins',S.ins);LC.s('cierres',S.cierres);LC.s('cfg',S.cfg);}
 function toggleDetail(id){const el=document.getElementById(id);if(el)el.style.display=el.style.display==='none'?'block':'none';}
 
 window.addEventListener('online',()=>{online=true;loadAll()});
@@ -63,7 +73,7 @@ function upPD(){const el=document.getElementById('pin-display');if(el)el.textCon
 async function pinOk(){
   if(!pinBuf){document.getElementById('pin-error').textContent='Ingresá tu PIN';return;}
   let usr=S.us.find(u=>u.rol===loginRol&&u.pin===pinBuf&&u.activo!==false);
-  if(!usr){if(loginRol==='dueno'&&pinBuf==='1234')usr={id:'usr_dueno',nombre:'Dueño',rol:'dueno'};else if(loginRol==='empleado'&&pinBuf==='0000')usr={id:'usr_empleado',nombre:'Empleado',rol:'empleado'};}
+  if(!usr){if(loginRol==='Licha'&&pinBuf==='1408')usr={id:'usr_dueno',nombre:'Dueño',rol:'dueno'};else if(loginRol==='empleado'&&pinBuf==='0000')usr={id:'usr_empleado',nombre:'Empleado',rol:'empleado'};}
   if(!usr){document.getElementById('pin-error').textContent='PIN incorrecto';pinBuf='';upPD();return;}
   sesion={id:usr.id,nombre:usr.nombre,rol:usr.rol};LC.s('sesion',sesion);
   document.getElementById('login-screen').style.display='none';
@@ -214,6 +224,12 @@ function rCaja(){
         <div class="fl"><label>Vuelto</label><input type="text" id="tk-vuelto" readonly style="color:var(--gn)"></div>
       </div>
     </div>
+    <div id="tk-mp-field" style="display:none;margin-bottom:8px">
+      <label style="font-size:9px;color:var(--tx2);font-family:var(--mo);letter-spacing:.5px">MEDIO DE COBRO DIGITAL</label>
+      <select id="tk-mp-tipo" style="margin-top:4px;width:100%" onchange="calcTKVuelto()">
+        ${(S.cfg.mp||[]).map(m=>`<option value="${m.id}" data-pct="${m.pct}">${m.label} ${m.pct>0?'('+m.pct+'%)':''}</option>`).join('')}
+      </select>
+    </div>
     <button class="btn btnp" onclick="cerrarTicket()" style="width:100%">✓ Cerrar ticket</button>
     `:'<div style="font-size:11px;color:var(--tx3);font-family:var(--mo);padding:6px 0">Agregá ítems para armar el ticket</div>'}
   </div>
@@ -333,13 +349,14 @@ function selPago(tipo){
   pagoSeleccionado=tipo;
   const ef=document.getElementById('pago-btn-ef'),tr=document.getElementById('pago-btn-tr'),mix=document.getElementById('pago-btn-mix');
   const mixFields=document.getElementById('tk-mixto-fields');
-  const inactiveStyle='1.5px solid var(--br2)';
+  const mpField=document.getElementById('tk-mp-field');
   const resetBtn=b=>{if(b){b.style.borderColor='var(--br2)';b.style.background='var(--sf2)';b.style.color='var(--tx2)';}};
   [ef,tr,mix].forEach(resetBtn);
   if(tipo==='Efectivo'&&ef){ef.style.borderColor='var(--gn)';ef.style.background='rgba(74,222,128,.12)';ef.style.color='var(--gn)';}
   else if(tipo==='Transferencia'&&tr){tr.style.borderColor='var(--bl)';tr.style.background='rgba(96,165,250,.12)';tr.style.color='var(--bl)';}
   else if(tipo==='mixto'&&mix){mix.style.borderColor='var(--ac)';mix.style.background='rgba(232,197,71,.12)';mix.style.color='var(--ac)';}
   if(mixFields)mixFields.style.display=tipo==='mixto'?'block':'none';
+  if(mpField)mpField.style.display=tipo!=='Efectivo'?'block':'none';
 }
 async function cerrarTicket(){
   if(!ticketItems.length)return alert('El ticket está vacío');
@@ -351,12 +368,27 @@ async function cerrarTicket(){
     if(ef+tr<tot&&!confirm(`El pago (${$m(ef+tr)}) es menor al total (${$m(tot)}). ¿Continuar?`))return;
   }else if(pagoSeleccionado==='Efectivo'){ef=tot;}
   else{tr=tot;}
+  // comision medio digital
+  let comision=0,mpLabel='';
+  if(tr>0){
+    const mpSel=document.getElementById('tk-mp-tipo');
+    const mpOpt=mpSel?.options[mpSel.selectedIndex];
+    const pct=parseFloat(mpOpt?.dataset?.pct)||0;
+    mpLabel=mpOpt?.text||'';
+    if(pct>0){comision=Math.round(tr*pct/100*100)/100;}
+  }
   const tktId=uid(),time=arTime();
   const rows=ticketItems.map(x=>({id:uid(),day,ticket_id:tktId,variant_id:x.varId,group_id:x.groupId,qty:x.qty,stock_used:x.stockUsed,price_unit:x.price,descuento_pct:x.desc,total:x.total,pago,pago_ef:ef,pago_tr:tr,time}));
   if(!S.ve[day])S.ve[day]=[];S.ve[day].push(...rows);
   // descontar stock
   ticketItems.forEach(x=>{const g=S.sg.find(sg=>sg.id===x.groupId);if(g)g.stock_qty=Math.max(0,(g.stock_qty||0)-x.stockUsed);});
-  ticketItems=[];pagoSeleccionado='Efectivo';save();render();toast('Ticket cerrado ✓');
+  // registrar comision como gasto automatico
+  if(comision>0){
+    const gCom={id:uid(),day,descripcion:`Comisión ${mpLabel} (ticket ${time})`,cat:'Comisiones digitales',amount:comision,metodo:'transferencia',auto:true,time};
+    if(!S.ga[day])S.ga[day]=[];S.ga[day].push(gCom);
+    if(online)sbUp('gastos',gCom).catch(()=>{});
+  }
+  ticketItems=[];pagoSeleccionado='Efectivo';save();render();toast('Ticket cerrado ✓'+(comision>0?` · Comisión ${$m(comision)} registrada`:''));
   if(online){sync('busy','guardando...');try{
     await sbUp('ventas',rows);
     const changed=[...new Set(rows.map(r=>r.group_id).filter(Boolean))];
@@ -483,7 +515,24 @@ function rStock(){
   </div>
   <div class="tbk"><div class="tt">Variantes — editá precio directo</div>
     <table><thead><tr><th>Variante</th><th>Descuenta</th><th>Precio $</th><th></th></tr></thead><tbody>${vrRows||`<tr><td colspan="4" class="empty-row">Sin variantes</td></tr>`}</tbody></table>
-  </div>`;
+  </div>
+  ${sesion?.rol==='dueno'?`
+  <div class="sh">Configuración de comisiones digitales</div>
+  <div class="blk">
+    <div style="font-size:10px;color:var(--tx2);font-family:var(--mo);margin-bottom:10px">Los porcentajes se aplican automáticamente al monto en transferencia de cada ticket. Podés editarlos según los acuerdos vigentes con cada medio de pago.</div>
+    <table style="width:100%"><thead><tr><th>Medio</th><th>% comisión</th><th></th></tr></thead><tbody>
+      ${(S.cfg.mp||[]).map((m,i)=>`<tr>
+        <td style="font-size:11px">${esc(m.label)}</td>
+        <td><input type="number" class="ip" value="${m.pct}" step="0.01" min="0" max="100" onchange="updMPPct(${i},this.value)" style="width:60px"></td>
+        <td><button class="dbtn" onclick="delMPItem(${i})">✕</button></td>
+      </tr>`).join('')}
+    </tbody></table>
+    <div class="fr" style="margin-top:10px">
+      <div class="fl" style="flex:2"><label>Nuevo medio</label><input type="text" id="mp-label" placeholder="Ej: MODO, Naranja X..."></div>
+      <div class="fl" style="max-width:80px"><label>% comisión</label><input type="number" id="mp-pct" placeholder="3.5" step="0.01" min="0"></div>
+      <button class="btn btnp" onclick="addMPItem()" style="align-self:flex-end">+ Agregar</button>
+    </div>
+  </div>`:''}`;
 }
 async function addG(tipo){
   const n=document.getElementById(tipo==='produccion'?'sgp-n':'sg-n')?.value.trim(),u=document.getElementById(tipo==='produccion'?'sgp-u':'sg-u')?.value||'kg',s=parseFloat(document.getElementById(tipo==='produccion'?'sgp-s':'sg-s')?.value)||0;
@@ -497,6 +546,10 @@ async function delG(id){if(!confirm('¿Eliminar grupo?'))return;S.sg=S.sg.filter
 async function addVr(){const gid=document.getElementById('vr-g').value,n=document.getElementById('vr-n').value.trim(),k=parseFloat(document.getElementById('vr-k').value)||0,p=parseFloat(document.getElementById('vr-p').value)||0;if(!gid||!n||!k)return alert('Completá todos los campos');const row={id:uid(),group_id:gid,name:n,qty_per_unit:k,price:p};S.vr.push(row);save();render();if(online){try{await sbUp('stock_variants',row);sync('ok','guardado')}catch(e){sync('err','error')}}}
 async function updVP(id,v){const vr=S.vr.find(x=>x.id===id);if(!vr)return;vr.price=parseFloat(v)||0;save();toast('Precio actualizado ✓');if(online){try{await sbUp('stock_variants',{id:vr.id,group_id:vr.group_id,name:vr.name,qty_per_unit:vr.qty_per_unit,price:vr.price});sync('ok','guardado')}catch(e){sync('err','error')}}}
 async function delVr(id){S.vr=S.vr.filter(x=>x.id!==id);save();render();if(online){try{await sbDel('stock_variants',id)}catch(e){}}}
+
+function updMPPct(i,v){if(!S.cfg.mp[i])return;S.cfg.mp[i].pct=parseFloat(v)||0;save();toast('Comisión actualizada ✓');}
+function delMPItem(i){if(!confirm('¿Eliminar este medio?'))return;S.cfg.mp.splice(i,1);save();render();}
+function addMPItem(){const lbl=document.getElementById('mp-label')?.value.trim(),pct=parseFloat(document.getElementById('mp-pct')?.value)||0;if(!lbl)return alert('Ingresá el nombre del medio');S.cfg.mp.push({id:uid(),label:lbl,pct});save();render();toast('Medio agregado ✓');}
 
 /* ══ PRODUCCIÓN ══════════════════════════════════════════════════════ */
 function rProd(){
@@ -751,7 +804,7 @@ function dayData(d){
   const ingEf=movs.filter(m=>m.tipo==='ingreso'&&m.metodo==='efectivo').reduce((s,m)=>s+m.monto,0),ingTr=movs.filter(m=>m.tipo==='ingreso'&&m.metodo==='transferencia').reduce((s,m)=>s+m.monto,0);
   return{vs,tv,tvEf,tvTr:tv-tvEf,byG,tg,tCompras,ingTotal,egTotal,ingEf,ingTr,resultado:tv+ingTotal-egTotal-tg-tCompras};
 }
-function yrData(yr){const ms=[];for(let m=1;m<=12;m++){const ym=yr+'-'+m.toString().padStart(2,'0');const{tv,tg,ingTotal,egTotal}=mData(ym);ms.push({lbl:fM(ym).split(' ')[0],tv,tg,res:tv+ingTotal-egTotal-tg})}return ms}
+function yrData(yr){const ms=[];for(let m=1;m<=12;m++){const ym=yr+'-'+m.toString().padStart(2,'0');const{tv,tg,tCompras,ingTotal,egTotal}=mData(ym);ms.push({lbl:fM(ym).split(' ')[0],tv,tg:tg+tCompras,res:tv+ingTotal-egTotal-tg-tCompras})}return ms}
 
 function rReportes(){
   const mths=getMths();if(!mths.includes(rMonth)&&mths.length)rMonth=mths[0];
@@ -848,14 +901,19 @@ function rRepAnual(yr){
 
 function rRepFin(mthTabs){
   const{tv,tvEf,tvTr,tg,tCompras,byG,ingEf,ingTr,egEf,egTr,ingTotal,egTotal,resultado}=mData(rMonth);
+  const tGastoTotal=tg+tCompras;
   const ingresoTotal=tv+ingTotal;const margen=ingresoTotal>0?Math.round((resultado/ingresoTotal)*100):0;
   const margenCol=margen>30?'var(--gn)':margen>10?'var(--ac)':'var(--rd)';
   const _compraIdsFin=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));
-  const catGas={};Object.entries(S.ga).filter(([d])=>d.startsWith(rMonth)).flatMap(([,g])=>g).filter(g=>!_compraIdsFin.has(g.id)).forEach(g=>{catGas[g.cat]=(catGas[g.cat]||0)+g.amount});
-  const catRows=Object.entries(catGas).sort((a,b)=>b[1]-a[1]).map(([c,v])=>`<tr><td>${c}</td><td style="font-family:var(--mo)">${$m(v)}</td><td style="font-family:var(--mo);color:var(--tx3)">${Math.round(tg>0?(v/tg)*100:0)}%</td></tr>`).join('')||`<tr><td colspan="3" class="empty-row">Sin gastos</td></tr>`;
+  const catGas={};
+  // gastos operativos por categoria
+  Object.entries(S.ga).filter(([d])=>d.startsWith(rMonth)).flatMap(([,g])=>g).filter(g=>!_compraIdsFin.has(g.id)).forEach(g=>{catGas[g.cat]=(catGas[g.cat]||0)+g.amount});
+  // compras como categoria propia
+  if(tCompras>0)catGas['Materia prima (compras)']=(catGas['Materia prima (compras)']||0)+tCompras;
+  const catRows=Object.entries(catGas).sort((a,b)=>b[1]-a[1]).map(([c,v])=>`<tr><td>${c}</td><td style="font-family:var(--mo)">${$m(v)}</td><td style="font-family:var(--mo);color:var(--tx3)">${Math.round(tGastoTotal>0?(v/tGastoTotal)*100:0)}%</td></tr>`).join('')||`<tr><td colspan="3" class="empty-row">Sin gastos</td></tr>`;
   return`
   <div class="mtabs">${mthTabs}</div>
-  <div class="kpis t3"><div class="kc hi"><div class="kl">Ingresos totales</div><div class="kv a">${$m(ingresoTotal)}</div><div class="kh">ventas + extra</div></div><div class="kc"><div class="kl">Gastos op.</div><div class="kv r">${$m(tg)}</div><div class="kh" style="font-size:9px">compras: ${$m(tCompras)}</div></div><div class="kc"><div class="kl">Resultado</div><div class="kv ${resultado>=0?'g':'r'}">${$m(resultado)}</div></div></div>
+  <div class="kpis t3"><div class="kc hi"><div class="kl">Ingresos totales</div><div class="kv a">${$m(ingresoTotal)}</div><div class="kh">ventas + extra</div></div><div class="kc"><div class="kl">Gastos totales</div><div class="kv r">${$m(tGastoTotal)}</div><div class="kh" style="font-size:9px;color:var(--tx3)">op. ${$m(tg)} · comp. ${$m(tCompras)}</div></div><div class="kc"><div class="kl">Resultado</div><div class="kv ${resultado>=0?'g':'r'}">${$m(resultado)}</div></div></div>
   <div class="kpis t3"><div class="kc"><div class="kl">Margen</div><div class="kv" style="color:${margenCol}">${margen}%</div></div><div class="kc"><div class="kl">Efectivo total</div><div class="kv g" style="font-size:14px">${$m(tvEf+ingEf-egEf)}</div></div><div class="kc"><div class="kl">Digital total</div><div class="kv b" style="font-size:14px">${$m(tvTr+ingTr-egTr)}</div></div></div>
   ${ingTotal>0||egTotal>0?`<div class="blk"><div class="bt">Movimientos de caja del período</div><div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--br)"><span style="font-size:11px;color:var(--tx2)">Ingresos extra</span><span style="font-family:var(--mo);color:var(--gn)">${$m(ingTotal)}</span></div><div style="display:flex;justify-content:space-between;padding:5px 0"><span style="font-size:11px;color:var(--tx2)">Egresos extra</span><span style="font-family:var(--mo);color:var(--rd)">${$m(egTotal)}</span></div></div>`:''}
   <div class="tbk"><div class="tt">Gastos operativos por categoría</div><table><thead><tr><th>Categoría</th><th>Monto</th><th>%</th></tr></thead><tbody>${catRows}</tbody></table></div>

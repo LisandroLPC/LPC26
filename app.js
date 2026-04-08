@@ -21,6 +21,7 @@ let S={
 let tab='caja',day=arDay(),online=navigator.onLine;
 let sesion=LC.g('sesion')||null;
 let ticketItems=[],corteItems=[],elabItems=[],compraItems=[];
+let pagoSeleccionado='Efectivo';
 let charts={},rMonth=arMonth(),rTab='dia',prodTab='corte';
 let loginRol='dueno',pinBuf='';
 
@@ -55,14 +56,14 @@ window.addEventListener('online',()=>{online=true;loadAll()});
 window.addEventListener('offline',()=>{online=false;sync('err','offline')});
 
 /* LOGIN */
-function selUser(r){loginRol=r;pinBuf='';document.getElementById('usel-Licha').classList.toggle('active',r==='Licha');document.getElementById('usel-Martu').classList.toggle('active',r==='Martu');upPD();}
+function selUser(r){loginRol=r;pinBuf='';document.getElementById('usel-dueno').classList.toggle('active',r==='dueno');document.getElementById('usel-empleado').classList.toggle('active',r==='empleado');upPD();}
 function pinPress(d){if(pinBuf.length>=6)return;pinBuf+=d;upPD();}
 function pinClear(){pinBuf='';upPD();document.getElementById('pin-error').textContent='';}
 function upPD(){const el=document.getElementById('pin-display');if(el)el.textContent=pinBuf?'●'.repeat(pinBuf.length):'····';}
 async function pinOk(){
   if(!pinBuf){document.getElementById('pin-error').textContent='Ingresá tu PIN';return;}
   let usr=S.us.find(u=>u.rol===loginRol&&u.pin===pinBuf&&u.activo!==false);
-  if(!usr){if(loginRol==='Licha'&&pinBuf==='1408')usr={id:'usr_Licha',nombre:'Licha',rol:'dueno'};else if(loginRol==='Martu'&&pinBuf==='0000')usr={id:'usr_empleado',nombre:'Martu',rol:'empleado'};}
+  if(!usr){if(loginRol==='dueno'&&pinBuf==='1408')usr={id:'usr_dueno',nombre:'Dueño',rol:'dueno'};else if(loginRol==='empleado'&&pinBuf==='0000')usr={id:'usr_empleado',nombre:'Empleado',rol:'empleado'};}
   if(!usr){document.getElementById('pin-error').textContent='PIN incorrecto';pinBuf='';upPD();return;}
   sesion={id:usr.id,nombre:usr.nombre,rol:usr.rol};LC.s('sesion',sesion);
   document.getElementById('login-screen').style.display='none';
@@ -197,11 +198,18 @@ function rCaja(){
       <span style="font-size:13px;font-weight:600">Total ticket</span>
       <span style="font-size:20px;font-weight:700;font-family:var(--mo);color:var(--ac)">${$m(tktTotal)}</span>
     </div>
-    <div style="font-size:9px;color:var(--tx2);font-family:var(--mo);margin-bottom:7px">FORMA DE PAGO (puede ser mixta)</div>
-    <div class="fr">
-      <div class="fl"><label>Efectivo $</label><input type="number" id="tk-pago-ef" placeholder="0" oninput="calcTKVuelto()"></div>
-      <div class="fl"><label>Transferencia $</label><input type="number" id="tk-pago-tr" placeholder="0" oninput="calcTKVuelto()"></div>
-      <div class="fl"><label>Vuelto</label><input type="text" id="tk-vuelto" readonly style="color:var(--gn)"></div>
+    <div style="font-size:9px;color:var(--tx2);font-family:var(--mo);margin-bottom:7px">FORMA DE PAGO</div>
+    <div style="display:flex;gap:7px;margin-bottom:10px">
+      <button id="pago-btn-ef" class="pago-btn active-pago" onclick="selPago('Efectivo')" style="flex:1;padding:9px 4px;border-radius:8px;border:1.5px solid var(--gn);background:rgba(74,222,128,.12);color:var(--gn);font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sa)">💵 Efectivo</button>
+      <button id="pago-btn-tr" class="pago-btn" onclick="selPago('Transferencia')" style="flex:1;padding:9px 4px;border-radius:8px;border:1.5px solid var(--br2);background:var(--sf2);color:var(--tx2);font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sa)">📲 Transf.</button>
+      <button id="pago-btn-mix" class="pago-btn" onclick="selPago('mixto')" style="flex:1;padding:9px 4px;border-radius:8px;border:1.5px solid var(--br2);background:var(--sf2);color:var(--tx2);font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sa)">🔀 Mixto</button>
+    </div>
+    <div id="tk-mixto-fields" style="display:none">
+      <div class="fr">
+        <div class="fl"><label>Efectivo $</label><input type="number" id="tk-pago-ef" placeholder="0" oninput="calcTKVuelto()"></div>
+        <div class="fl"><label>Transferencia $</label><input type="number" id="tk-pago-tr" placeholder="0" oninput="calcTKVuelto()"></div>
+        <div class="fl"><label>Vuelto</label><input type="text" id="tk-vuelto" readonly style="color:var(--gn)"></div>
+      </div>
     </div>
     <button class="btn btnp" onclick="cerrarTicket()" style="width:100%">✓ Cerrar ticket</button>
     `:'<div style="font-size:11px;color:var(--tx3);font-family:var(--mo);padding:6px 0">Agregá ítems para armar el ticket</div>'}
@@ -307,19 +315,34 @@ function addTKItem(){
   render();
 }
 function rmTKItem(i){ticketItems.splice(i,1);render();}
+function selPago(tipo){
+  pagoSeleccionado=tipo;
+  const ef=document.getElementById('pago-btn-ef'),tr=document.getElementById('pago-btn-tr'),mix=document.getElementById('pago-btn-mix');
+  const mixFields=document.getElementById('tk-mixto-fields');
+  const inactiveStyle='1.5px solid var(--br2)';
+  const resetBtn=b=>{if(b){b.style.borderColor='var(--br2)';b.style.background='var(--sf2)';b.style.color='var(--tx2)';}};
+  [ef,tr,mix].forEach(resetBtn);
+  if(tipo==='Efectivo'&&ef){ef.style.borderColor='var(--gn)';ef.style.background='rgba(74,222,128,.12)';ef.style.color='var(--gn)';}
+  else if(tipo==='Transferencia'&&tr){tr.style.borderColor='var(--bl)';tr.style.background='rgba(96,165,250,.12)';tr.style.color='var(--bl)';}
+  else if(tipo==='mixto'&&mix){mix.style.borderColor='var(--ac)';mix.style.background='rgba(232,197,71,.12)';mix.style.color='var(--ac)';}
+  if(mixFields)mixFields.style.display=tipo==='mixto'?'block':'none';
+}
 async function cerrarTicket(){
   if(!ticketItems.length)return alert('El ticket está vacío');
-  const ef=parseFloat(document.getElementById('tk-pago-ef')?.value)||0;
-  const tr=parseFloat(document.getElementById('tk-pago-tr')?.value)||0;
   const tot=ticketItems.reduce((s,x)=>s+x.total,0);
-  if(ef+tr<tot&&!confirm(`El pago (${$m(ef+tr)}) es menor al total (${$m(tot)}). ¿Continuar?`))return;
+  let ef=0,tr=0,pago=pagoSeleccionado;
+  if(pagoSeleccionado==='mixto'){
+    ef=parseFloat(document.getElementById('tk-pago-ef')?.value)||0;
+    tr=parseFloat(document.getElementById('tk-pago-tr')?.value)||0;
+    if(ef+tr<tot&&!confirm(`El pago (${$m(ef+tr)}) es menor al total (${$m(tot)}). ¿Continuar?`))return;
+  }else if(pagoSeleccionado==='Efectivo'){ef=tot;}
+  else{tr=tot;}
   const tktId=uid(),time=arTime();
-  const pago=ef>0&&tr>0?'mixto':ef>0?'Efectivo':'Transferencia';
   const rows=ticketItems.map(x=>({id:uid(),day,ticket_id:tktId,variant_id:x.varId,group_id:x.groupId,qty:x.qty,stock_used:x.stockUsed,price_unit:x.price,descuento_pct:x.desc,total:x.total,pago,pago_ef:ef,pago_tr:tr,time}));
   if(!S.ve[day])S.ve[day]=[];S.ve[day].push(...rows);
   // descontar stock
   ticketItems.forEach(x=>{const g=S.sg.find(sg=>sg.id===x.groupId);if(g)g.stock_qty=Math.max(0,(g.stock_qty||0)-x.stockUsed);});
-  ticketItems=[];save();render();toast('Ticket cerrado ✓');
+  ticketItems=[];pagoSeleccionado='Efectivo';save();render();toast('Ticket cerrado ✓');
   if(online){sync('busy','guardando...');try{
     await sbUp('ventas',rows);
     const changed=[...new Set(rows.map(r=>r.group_id).filter(Boolean))];

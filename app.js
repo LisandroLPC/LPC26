@@ -768,7 +768,8 @@ function onCiTipo(){
     if(row)row.style.display='none';
   }
   calcCostoUnitario();
-}{const precio=parseFloat(document.getElementById('ci-precio')?.value)||0,qtyR=parseFloat(document.getElementById('ci-qtyr')?.value)||0,qtyC=parseFloat(document.getElementById('ci-qtyc')?.value)||0,prev=document.getElementById('costo-preview');if(!prev)return;if(precio&&(qtyR||qtyC)){const base=qtyR||qtyC,costo=precio/base,refEl=document.getElementById('ci-ref'),unit=refEl?.options[refEl.selectedIndex]?.dataset?.u||'kg';prev.textContent=`→ Costo calculado: ${$d2(costo)}/${unit}`;prev.style.color='var(--ac)';}else{prev.textContent='';}}
+}
+function calcCostoUnitario(){const precio=parseFloat(document.getElementById('ci-precio')?.value)||0,qtyR=parseFloat(document.getElementById('ci-qtyr')?.value)||0,qtyC=parseFloat(document.getElementById('ci-qtyc')?.value)||0,prev=document.getElementById('costo-preview');if(!prev)return;if(precio&&(qtyR||qtyC)){const base=qtyR||qtyC,costo=precio/base,refEl=document.getElementById('ci-ref'),unit=refEl?.options[refEl.selectedIndex]?.dataset?.u||'kg';prev.textContent=`→ Costo calculado: ${$d2(costo)}/${unit}`;prev.style.color='var(--ac)';}else{prev.textContent='';}}
 function selAllProp(){sgV().forEach(g=>{const cb=document.getElementById('prop_'+g.id);if(cb)cb.checked=true;});}
 function renderCompraItems(){
   const list=document.getElementById('cp-items-list');if(!list)return;

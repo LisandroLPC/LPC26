@@ -102,19 +102,34 @@ async function loadAll(){
   if(!online){sync('err','offline');return}
   sync('busy','cargando...');
   try{
-    const[us,sg,vr,ve,caja,co,coi,ct,cti,el,eli,ga,ins]=await Promise.all([
+    const[us,sg,vr,ve,caja,co,coi,ct,cti,el,eli,ga,ins,cierresArr]=await Promise.all([
       sbQ('usuarios'),sbQ('stock_groups','order=name'),sbQ('stock_variants','order=name'),
       sbQ('ventas','order=created_at'),sbQ('caja_movimientos','order=created_at'),
       sbQ('compras','order=created_at'),sbQ('compras_items','order=created_at'),
       sbQ('cortes','order=created_at'),sbQ('cortes_items','order=created_at'),
       sbQ('elaboraciones','order=created_at'),sbQ('elaboraciones_items','order=created_at'),
       sbQ('gastos','order=created_at'),sbQ('insumos','order=name'),
+      sbQ('cierres','order=day').catch(()=>[]),
     ]);
     S.us=us;S.sg=sg;S.vr=vr;S.co=co;S.coi=coi;S.ct=ct;S.cti=cti;S.el=el;S.eli=eli;
     S.ins=ins.map(i=>({...i,costUnit:i.cost_unit||0,stock_qty:i.stock_qty||0}));
+    // Restaurar cierres desde Supabase (indexados por day)
+    if(cierresArr&&cierresArr.length){
+      const cm2={};
+      cierresArr.forEach(c=>{
+        const d=typeof c.day==='string'?c.day.slice(0,10):c.day;
+        cm2[d]={total_contado:c.total_contado,retiro:c.retiro,saldo_siguiente:c.saldo_siguiente,fondo_inicial_manual:c.fondo_inicial_manual,detalle:c.detalle||{},time:c.time};
+      });
+      // Merge: no pisar cierres locales que no estén en Supabase aún
+      S.cierres={...cm2,...Object.fromEntries(Object.entries(S.cierres).filter(([d])=>!cm2[d]))};
+    }
     const vm={},gm={},cm={};
     ve.forEach(x=>{if(!vm[x.day])vm[x.day]=[];vm[x.day].push(x)});
-    ga.forEach(x=>{if(!gm[x.day])gm[x.day]=[];gm[x.day].push(x)});
+    // Restaurar metodo en gastos (Supabase puede no tenerlo si la columna es nueva)
+    ga.forEach(x=>{
+      if(!x.metodo)x.metodo=x.cat==='Comisiones digitales'?'transferencia':'efectivo';
+      if(!gm[x.day])gm[x.day]=[];gm[x.day].push(x);
+    });
     caja.forEach(x=>{if(!cm[x.day])cm[x.day]=[];cm[x.day].push(x)});
     S.ve=vm;S.ga=gm;S.caja=cm;
     save();sync('ok','sincronizado');render();
@@ -481,6 +496,11 @@ function saveCierre(){
   if(!S.cierres)S.cierres={};
   S.cierres[day]={total_contado:total,detalle,retiro,saldo_siguiente:saldo,fondo_inicial_manual:fondoManualVal,time:arTime()};
   save();render();toast('Cierre guardado ✓ — Fondo siguiente: '+$m(saldo));
+  // Persistir cierre en Supabase
+  if(online){
+    const row={id:'cierre_'+day,day,total_contado:total,retiro,saldo_siguiente:saldo,fondo_inicial_manual:fondoManualVal??null,detalle:JSON.stringify(detalle),time:arTime()};
+    sbUp('cierres',row).catch(e=>console.error('Error guardando cierre:',e));
+  }
 }
 
 /* Gastos */

@@ -178,11 +178,16 @@ function rCaja(){
 
   // ventas del dia agrupadas por ticket_id
   const byTicket={};
-  vs.forEach(v=>{const tk=v.ticket_id||v.id;if(!byTicket[tk])byTicket[tk]={items:[],total:0,pago:'',time:v.time||''};byTicket[tk].items.push(v);byTicket[tk].total+=v.total;byTicket[tk].pago=v.pago||'';});
-  const ticketsSorted=Object.entries(byTicket).sort((a,b)=>a[1].time.localeCompare(b[1].time));
+  vs.forEach(v=>{const tk=v.ticket_id||v.id;if(!byTicket[tk])byTicket[tk]={items:[],total:0,pago:'',time:v.time||''};byTicket[tk].items.push(v);byTicket[tk].total+=v.total;byTicket[tk].pago=v.pago||'';if(!byTicket[tk].created_at)byTicket[tk].created_at=v.created_at||v.time||'';});
+  // Ordenar por created_at si existe, sino por time
+  const ticketsSorted=Object.entries(byTicket).sort((a,b)=>{
+    const ta=a[1].created_at||a[1].time||'';
+    const tb=b[1].created_at||b[1].time||'';
+    return ta.localeCompare(tb);
+  });
   const vRows=ticketsSorted.length?ticketsSorted.map(([tid,tk],idx)=>{
     const itemList=tk.items.map(v=>{const vr=S.vr.find(x=>x.id===v.variant_id),gr=S.sg.find(x=>x.id===v.group_id);return`<div style="font-size:10px;color:var(--tx3);padding:1px 0">${esc(gr?gr.name:'–')}${vr?' › '+esc(vr.name):''} ×${v.qty} = ${$m(v.total)}</div>`;}).join('');
-    const pagoTag=tk.pago==='mixto'?`<span class="tag tp">mix</span>`:`<span class="tag tv">${(tk.pago||'').slice(0,3)}</span>`;
+    const pagoTag=tk.pago==='mixto'?`<span class="tag tmx">mix</span>`:tk.pago==='Transferencia'?`<span class="tag tp">Tr.</span>`:`<span class="tag tv">Ef.</span>`;
     return`<tr>
       <td style="font-family:var(--mo);color:var(--tx3);font-size:11px">#${idx+1}</td>
       <td>${tk.time}</td>
@@ -209,8 +214,8 @@ function rCaja(){
   <div class="kpis">
     <div class="kc hi"><div class="kl">Ventas</div><div class="kv a">${$m(tv)}</div><div class="kh">${vs.length} ítems · ${Object.keys(byTicket).length} tickets</div></div>
     <div class="kc"><div class="kl">Resultado</div><div class="kv ${resultado>=0?'g':'r'}">${$m(resultado)}</div></div>
-    <div class="kc"><div class="kl">Efectivo caja</div><div class="kv">${$m(cajaEf)}</div></div>
-    <div class="kc"><div class="kl">Transferencias</div><div class="kv">${$m(cajaTr)}</div></div>
+    <div class="kc" style="border-color:rgba(26,158,58,.3);background:rgba(26,158,58,.04)"><div class="kl">Efectivo caja</div><div class="kv" style="color:var(--gn)">${$m(cajaEf)}</div></div>
+    <div class="kc" style="border-color:rgba(46,155,212,.3);background:rgba(46,155,212,.04)"><div class="kl">Transferencias</div><div class="kv" style="color:var(--bl)">${$m(cajaTr)}</div></div>
   </div>
   ${fondoInicial>0?`<div class="info-box green">💵 Fondo inicial del día: ${$m(fondoInicial)}</div>`:''}
 
@@ -366,9 +371,9 @@ function renderTKItems(){
   list.innerHTML=`<div style="margin-top:8px;border-top:1px solid var(--br);padding-top:8px">`
     +ticketItems.map((x,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--br)">
       <div style="font-size:12px">${esc(x.nombre)} ×${x.qty}${x.desc>0?` <span class="tag tc">-${x.desc}%</span>`:''}</div>
-      <div style="display:flex;align-items:center;gap:6px"><span style="font-family:var(--mo);font-size:12px;color:var(--ac)">${$m(x.total)}</span><button class="dbtn" onclick="rmTKItem(${i})">✕</button></div>
+      <div style="display:flex;align-items:center;gap:6px"><span style="font-family:var(--mo);font-size:12px;color:var(--tx)">${$m(x.total)}</span><button class="dbtn" onclick="rmTKItem(${i})">✕</button></div>
     </div>`).join('')
-    +`<div style="display:flex;justify-content:space-between;padding:6px 0;font-weight:600"><span style="font-size:12px">Subtotal</span><span style="font-family:var(--mo);font-size:14px;color:var(--ac)">${$m(tot)}</span></div></div>`;
+    +`<div style="display:flex;justify-content:space-between;padding:6px 0;font-weight:600"><span style="font-size:12px">Subtotal</span><span style="font-family:var(--mo);font-size:14px;color:var(--tx)">${$m(tot)}</span></div></div>`;
 }
 function addTKItem(){
   const s=document.getElementById('tk-var'),o=s?.options[s.selectedIndex];
@@ -596,6 +601,22 @@ function rStock(){
       <div class="fl" style="max-width:80px"><label>% comisión</label><input type="number" id="mp-pct" placeholder="3.5" step="0.01" min="0"></div>
       <button class="btn btnp" onclick="addMPItem()" style="align-self:flex-end">+ Agregar</button>
     </div>
+  </div>
+  <div class="sh">Usuarios y acceso</div>
+  <div class="blk">
+    <div style="font-size:10px;color:var(--tx2);font-family:var(--mo);margin-bottom:10px">Editá nombre y PIN de cada usuario. El PIN debe tener entre 4 y 6 dígitos.</div>
+    ${S.us.filter(u=>u.id!=='usr_dueno'&&u.id!=='usr_empleado'||true).map((u,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--br)">
+      <div style="flex:2"><input type="text" class="ip" value="${esc(u.nombre)}" placeholder="Nombre" style="width:100%" onchange="updUsrNombre('${u.id}',this.value)"></div>
+      <div style="flex:1"><input type="text" class="ip" value="${u.pin||''}" placeholder="PIN" maxlength="6" style="width:100%;letter-spacing:3px" onchange="updUsrPin('${u.id}',this.value)"></div>
+      <span style="font-size:9px;font-family:var(--mo);color:var(--tx3);white-space:nowrap">${u.rol==='dueno'?'👑 dueño':'👤 empleado'}</span>
+    </div>`).join('')||'<div style="font-size:11px;color:var(--tx3)">Sin usuarios</div>'}
+    <div class="fr" style="margin-top:12px">
+      <div class="fl"><label>Nombre</label><input type="text" id="usr-n" placeholder="Nombre"></div>
+      <div class="fl" style="max-width:90px"><label>PIN (4-6 dígitos)</label><input type="text" id="usr-pin" placeholder="0000" maxlength="6"></div>
+      <div class="fl" style="max-width:90px"><label>Rol</label><select id="usr-rol"><option value="empleado">Empleado</option><option value="dueno">Dueño</option></select></div>
+      <button class="btn btnp" onclick="addUsr()" style="align-self:flex-end">+ Agregar</button>
+    </div>
   </div>`:''}`;
 }
 async function addG(tipo){
@@ -610,6 +631,32 @@ async function delG(id){if(!confirm('¿Eliminar grupo?'))return;S.sg=S.sg.filter
 async function addVr(){const gid=document.getElementById('vr-g').value,n=document.getElementById('vr-n').value.trim(),k=parseFloat(document.getElementById('vr-k').value)||0,p=parseFloat(document.getElementById('vr-p').value)||0;if(!gid||!n||!k)return alert('Completá todos los campos');const row={id:uid(),group_id:gid,name:n,qty_per_unit:k,price:p};S.vr.push(row);save();render();if(online){try{await sbUp('stock_variants',row);sync('ok','guardado')}catch(e){sync('err','error')}}}
 async function updVP(id,v){const vr=S.vr.find(x=>x.id===id);if(!vr)return;vr.price=parseFloat(v)||0;save();toast('Precio actualizado ✓');if(online){try{await sbUp('stock_variants',{id:vr.id,group_id:vr.group_id,name:vr.name,qty_per_unit:vr.qty_per_unit,price:vr.price});sync('ok','guardado')}catch(e){sync('err','error')}}}
 async function delVr(id){S.vr=S.vr.filter(x=>x.id!==id);save();render();if(online){try{await sbDel('stock_variants',id)}catch(e){}}}
+
+/* Gestión de usuarios */
+async function updUsrNombre(id,v){
+  const u=S.us.find(x=>x.id===id);if(!u)return;
+  const nombre=v.trim();if(!nombre)return;
+  u.nombre=nombre;save();toast('Nombre actualizado ✓');
+  // Actualizar sesión activa si es el usuario logueado
+  if(sesion&&sesion.id===id){sesion.nombre=nombre;LC.s('sesion',sesion);document.getElementById('hdr-sub').textContent='Hoy · '+fDL(day)+' · '+nombre;}
+  if(online){try{await sbUp('usuarios',{id:u.id,nombre:u.nombre,pin:u.pin,rol:u.rol});sync('ok','guardado')}catch(e){sync('err','error')}}
+}
+async function updUsrPin(id,v){
+  const u=S.us.find(x=>x.id===id);if(!u)return;
+  const pin=v.trim();
+  if(!/^\d{4,6}$/.test(pin))return alert('El PIN debe tener entre 4 y 6 dígitos numéricos');
+  u.pin=pin;save();toast('PIN actualizado ✓');
+  if(online){try{await sbUp('usuarios',{id:u.id,nombre:u.nombre,pin:u.pin,rol:u.rol});sync('ok','guardado')}catch(e){sync('err','error')}}
+}
+async function addUsr(){
+  const n=document.getElementById('usr-n')?.value.trim(),pin=document.getElementById('usr-pin')?.value.trim(),rol=document.getElementById('usr-rol')?.value||'empleado';
+  if(!n)return alert('Ingresá un nombre');
+  if(!/^\d{4,6}$/.test(pin))return alert('El PIN debe tener entre 4 y 6 dígitos numéricos');
+  if(S.us.find(u=>u.pin===pin&&u.rol===rol))return alert('Ya existe un usuario con ese PIN y rol');
+  const row={id:uid(),nombre:n,pin,rol,activo:true};
+  S.us.push(row);save();render();toast('Usuario agregado ✓');
+  if(online){try{await sbUp('usuarios',row);sync('ok','guardado')}catch(e){sync('err','error')}}
+}
 
 function updMPPct(i,v){if(!S.cfg.mp[i])return;S.cfg.mp[i].pct=parseFloat(v)||0;save();toast('Comisión actualizada ✓');}
 function delMPItem(i){if(!confirm('¿Eliminar este medio?'))return;S.cfg.mp.splice(i,1);save();render();}

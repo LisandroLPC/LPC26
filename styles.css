@@ -3,12 +3,12 @@
 
 :root{
   /* Paleta del logo */
-  --bg:#ede8df;           /* fondo beige más marcado */
-  --sf:#f7f4ee;           /* superficie cards */
-  --sf2:#e8e2d8;          /* superficie secundaria */
-  --sf3:#ddd7cc;          /* superficie terciaria */
-  --br:#d4cec3;           /* bordes suaves */
-  --br2:#bfb8ac;          /* bordes más marcados */
+  --bg:#e8dcc8;           /* fondo arena */
+  --sf:#f5efe3;           /* superficie cards */
+  --sf2:#ddd3bc;          /* superficie secundaria */
+  --sf3:#d4c9b0;          /* superficie terciaria */
+  --br:#c9bea5;           /* bordes suaves */
+  --br2:#b5a98e;          /* bordes más marcados */
 
   /* Textos */
   --tx:#1a1612;           /* texto principal negro cálido */

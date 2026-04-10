@@ -3,12 +3,12 @@
 
 :root{
   /* Paleta del logo */
-  --bg:#f7f5f0;           /* fondo crema cálido */
-  --sf:#ffffff;           /* superficie cards */
-  --sf2:#f0ede6;          /* superficie secundaria */
-  --sf3:#e8e4db;          /* superficie terciaria */
-  --br:#e0dbd0;           /* bordes suaves */
-  --br2:#ccc8be;          /* bordes más marcados */
+  --bg:#ede8df;           /* fondo beige más marcado */
+  --sf:#f7f4ee;           /* superficie cards */
+  --sf2:#e8e2d8;          /* superficie secundaria */
+  --sf3:#ddd7cc;          /* superficie terciaria */
+  --br:#d4cec3;           /* bordes suaves */
+  --br2:#bfb8ac;          /* bordes más marcados */
 
   /* Textos */
   --tx:#1a1612;           /* texto principal negro cálido */
@@ -16,13 +16,15 @@
   --tx3:#a09890;          /* texto terciario gris cálido */
 
   /* Colores del logo */
-  --ac:#f5c800;           /* amarillo vibrante (acento principal) */
-  --ac2:#d4a900;          /* amarillo oscuro hover */
+  --ac:#d4a900;           /* amarillo más oscuro — legible en fondos claros y oscuros */
+  --ac2:#b89000;          /* amarillo hover */
   --rd:#d42b2b;           /* rojo del logo */
   --rd2:#b52222;          /* rojo oscuro */
-  --bl:#4a90c4;           /* azul cielo del logo */
-  --bl2:#3577a8;          /* azul oscuro */
-  --gn:#2ea84a;           /* verde */
+  --bl:#2e9bd4;           /* celeste transferencia */
+  --bl2:#1f7fb0;          /* celeste oscuro */
+  --gn:#1a9e3a;           /* verde efectivo */
+  --gn2:#157d2e;          /* verde oscuro */
+  --mx:#e8760a;           /* naranja mixto */
   --or:#e8760a;           /* naranja */
   --pu:#8b5cf6;           /* púrpura */
 
@@ -241,11 +243,12 @@ tr:hover td{background:rgba(245,200,0,.06)}
   padding:2px 6px;border-radius:4px;font-weight:700;
   letter-spacing:.3px;text-transform:uppercase;
 }
-.tv{background:rgba(46,168,74,.1);color:var(--gn);border:1px solid rgba(46,168,74,.2)}
+.tv{background:rgba(26,158,58,.12);color:var(--gn);border:1px solid rgba(26,158,58,.25)}
 .tg{background:rgba(212,43,43,.1);color:var(--rd);border:1px solid rgba(212,43,43,.2)}
-.tp{background:rgba(74,144,196,.1);color:var(--bl);border:1px solid rgba(74,144,196,.2)}
+.tp{background:rgba(46,155,212,.12);color:var(--bl);border:1px solid rgba(46,155,212,.25)}
 .tc{background:rgba(139,92,246,.1);color:var(--pu);border:1px solid rgba(139,92,246,.2)}
 .to{background:rgba(232,118,10,.1);color:var(--or);border:1px solid rgba(232,118,10,.2)}
+.tmx{background:rgba(232,118,10,.12);color:var(--mx);border:1px solid rgba(232,118,10,.25)}
 
 /* ══ MISC ══════════════════════════════════════════════ */
 .alrt{

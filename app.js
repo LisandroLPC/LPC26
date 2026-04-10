@@ -154,7 +154,14 @@ function render(){
 /* ══ CAJA ══════════════════════════════════════════════════════ */
 function rCaja(){
   const vs=dV(),tv=vs.reduce((s,v)=>s+v.total,0);
-  const ef=vs.filter(v=>v.pago==='Efectivo'||v.pago_ef>0).reduce((s,v)=>s+(v.pago==='Efectivo'?v.total:(v.pago_ef||0)),0);
+  // Calcular ef/tr por ticket único para evitar duplicar pago_ef/pago_tr en tickets con múltiples ítems
+  const ticketsSeen=new Set();
+  let ef=0;
+  vs.forEach(v=>{
+    const tk=v.ticket_id||v.id;
+    if(v.pago==='Efectivo'){ef+=v.total;}
+    else if(v.pago==='mixto'&&!ticketsSeen.has(tk)){ef+=(v.pago_ef||0);ticketsSeen.add(tk);}
+  });
   const movs=dCaja();
   const ingEf=movs.filter(m=>m.tipo==='ingreso'&&m.metodo==='efectivo').reduce((s,m)=>s+m.monto,0);
   const egEf=movs.filter(m=>m.tipo==='egreso'&&m.metodo==='efectivo').reduce((s,m)=>s+m.monto,0);
@@ -460,7 +467,7 @@ function calcCierre(){
   const deberiaEl=document.getElementById('cierre-deberia'),contEl=document.getElementById('cierre-contado-disp'),difEl=document.getElementById('cierre-diferencia'),retDisp=document.getElementById('cierre-retiro-display');
   if(retDisp)retDisp.textContent='-'+$m(retiro);
   if(deberiaEl){
-    const vs=dV(),ef=vs.filter(v=>v.pago==='Efectivo'||v.pago_ef>0).reduce((s,v)=>s+(v.pago==='Efectivo'?v.total:(v.pago_ef||0)),0);
+    const vs=dV();const{ef}=calcEfTr(vs);
     const compraGastoIds=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));
     const gaEf=(S.ga[day]||[]).filter(g=>!compraGastoIds.has(g.id)&&g.metodo!=='transferencia').reduce((s,g)=>s+g.amount,0);
     const prevDay=getPrevDay(day);
@@ -855,12 +862,36 @@ async function delCompra(id){
 
 /* ══ REPORTES ══════════════════════════════════════════════════════ */
 function getMths(){const s=new Set();Object.keys(S.ve).forEach(d=>s.add(d.slice(0,7)));Object.keys(S.ga).forEach(d=>s.add(d.slice(0,7)));return[...s].sort((a,b)=>b.localeCompare(a))}
+
+// Calcula efectivo y transferencia correctamente deduplicando tickets mixtos
+function calcEfTr(vs){
+  let ef=0,tr=0;
+  const seen=new Set();
+  // Primero sumar ventas puras
+  vs.forEach(v=>{
+    if(v.pago==='Efectivo'){ef+=v.total;}
+    else if(v.pago==='Transferencia'){tr+=v.total;}
+    else if(v.pago==='mixto'){
+      const tk=v.ticket_id||v.id;
+      if(!seen.has(tk)){seen.add(tk);ef+=(v.pago_ef||0);tr+=(v.pago_tr||0);}
+    }
+  });
+  return{ef,tr};
+}
+
 function mData(ym){
   const vs=Object.entries(S.ve).filter(([d])=>d.startsWith(ym)).flatMap(([,v])=>v);
   const tv=vs.reduce((s,v)=>s+v.total,0);
-  const tvEf=vs.filter(v=>v.pago==='Efectivo'||(v.pago_ef>0&&v.pago==='mixto')).reduce((s,v)=>s+(v.pago==='Efectivo'?v.total:(v.pago_ef||0)),0);
-  const tvTr=tv-tvEf;
-  const byG={};vs.forEach(v=>{const g=S.sg.find(x=>x.id===v.group_id),gn=g?g.name:'Otros';if(!byG[gn])byG[gn]={qty:0,tot:0,ef:0,tr:0,unit:g?.unit||''};byG[gn].qty+=(v.stock_used||0);byG[gn].tot+=v.total;if(v.pago==='Efectivo')byG[gn].ef+=v.total;else byG[gn].tr+=v.total;});
+  const{ef:tvEf,tr:tvTr}=calcEfTr(vs);
+  const byG={};vs.forEach(v=>{
+    const g=S.sg.find(x=>x.id===v.group_id),gn=g?g.name:'Otros';
+    if(!byG[gn])byG[gn]={qty:0,tot:0,ef:0,tr:0,unit:g?.unit||''};
+    byG[gn].qty+=(v.stock_used||0);byG[gn].tot+=v.total;
+    if(v.pago==='Efectivo')byG[gn].ef+=v.total;
+    else if(v.pago==='Transferencia')byG[gn].tr+=v.total;
+    // mixto: distribuir proporcionalmente por ítem no es posible sin duplicar, se asigna al total
+    else{byG[gn].tr+=v.total;}
+  });
   const _compraIdsM=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));
   const tg=Object.entries(S.ga).filter(([d])=>d.startsWith(ym)).flatMap(([,g])=>g).filter(g=>!_compraIdsM.has(g.id)).reduce((s,g)=>s+g.amount,0);
   const tCompras=S.co.filter(c=>c.day.startsWith(ym)).reduce((s,c)=>s+c.total,0);
@@ -874,8 +905,15 @@ function mData(ym){
 }
 function dayData(d){
   const vs=S.ve[d]||[],tv=vs.reduce((s,v)=>s+v.total,0);
-  const tvEf=vs.filter(v=>v.pago==='Efectivo').reduce((s,v)=>s+v.total,0);
-  const byG={};vs.forEach(v=>{const g=S.sg.find(x=>x.id===v.group_id),gn=g?g.name:'Otros';if(!byG[gn])byG[gn]={qty:0,tot:0,ef:0,tr:0,unit:g?.unit||''};byG[gn].qty+=(v.stock_used||0);byG[gn].tot+=v.total;if(v.pago==='Efectivo')byG[gn].ef+=v.total;else byG[gn].tr+=v.total;});
+  const{ef:tvEf,tr:tvTr}=calcEfTr(vs);
+  const byG={};vs.forEach(v=>{
+    const g=S.sg.find(x=>x.id===v.group_id),gn=g?g.name:'Otros';
+    if(!byG[gn])byG[gn]={qty:0,tot:0,ef:0,tr:0,unit:g?.unit||''};
+    byG[gn].qty+=(v.stock_used||0);byG[gn].tot+=v.total;
+    if(v.pago==='Efectivo')byG[gn].ef+=v.total;
+    else if(v.pago==='Transferencia')byG[gn].tr+=v.total;
+    else{byG[gn].tr+=v.total;}
+  });
   const _compraIdsD=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));
   const tg=(S.ga[d]||[]).filter(g=>!_compraIdsD.has(g.id)).reduce((s,g)=>s+g.amount,0);
   const tCompras=S.co.filter(c=>c.day===d).reduce((s,c)=>s+c.total,0);

@@ -56,6 +56,16 @@ function $d2(n){return'$'+(+(n||0)).toFixed(2)}
 function fQ(n,u){return(+(n||0)).toFixed(2).replace(/\.00$/,'')+(u?' '+u:'')}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,5)}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+// Aplica costo promedio ponderado: mezcla stock existente con qty/costo nuevo
+function applyCostoPonderado(g,qtyNueva,costoNuevo){
+  const qtyVieja=g.stock_qty||0,costoViejo=g.cost_unit||0;
+  const qtyTotal=qtyVieja+qtyNueva;
+  g.cost_unit=qtyTotal>0?((qtyVieja*costoViejo)+(qtyNueva*costoNuevo))/qtyTotal:costoNuevo;
+  g.stock_qty=qtyTotal;
+}
+// Determina cuanto de un gasto corresponde a efectivo/transferencia (soporta gastos manuales viejos y compras con split)
+function gastoEf(g){if(g.pago_efectivo||g.pago_transferencia)return g.pago_efectivo||0;return g.metodo==='transferencia'?0:g.amount;}
+function gastoTr(g){if(g.pago_efectivo||g.pago_transferencia)return g.pago_transferencia||0;return g.metodo==='transferencia'?g.amount:0;}
 function dV(){return S.ve[day]||[]}
 function dG(){return S.ga[day]||[]}
 function dCaja(){return S.caja[day]||[]}
@@ -421,7 +431,7 @@ async function cerrarTicket(){
     if(pct>0){comision=Math.round(tr*pct/100*100)/100;}
   }
   const tktId=uid(),time=arTime();
-  const rows=ticketItems.map(x=>({id:uid(),day,ticket_id:tktId,variant_id:x.varId,group_id:x.groupId,qty:x.qty,stock_used:x.stockUsed,price_unit:x.price,descuento_pct:x.desc,total:x.total,pago,pago_ef:ef,pago_tr:tr,time}));
+  const rows=ticketItems.map(x=>{const g=S.sg.find(sg=>sg.id===x.groupId);return{id:uid(),day,ticket_id:tktId,variant_id:x.varId,group_id:x.groupId,qty:x.qty,stock_used:x.stockUsed,price_unit:x.price,descuento_pct:x.desc,total:x.total,costo_unit_venta:g?.cost_unit||0,pago,pago_ef:ef,pago_tr:tr,time};});
   if(!S.ve[day])S.ve[day]=[];S.ve[day].push(...rows);
   // descontar stock
   ticketItems.forEach(x=>{const g=S.sg.find(sg=>sg.id===x.groupId);if(g)g.stock_qty=Math.max(0,(g.stock_qty||0)-x.stockUsed);});
@@ -473,8 +483,7 @@ function calcCierre(){
   if(retDisp)retDisp.textContent='-'+$m(retiro);
   if(deberiaEl){
     const vs=dV();const{ef}=calcEfTr(vs);
-    const compraGastoIds=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));
-    const gaEf=(S.ga[day]||[]).filter(g=>!compraGastoIds.has(g.id)&&g.metodo!=='transferencia').reduce((s,g)=>s+g.amount,0);
+    const gaEf=(S.ga[day]||[]).reduce((s,g)=>s+gastoEf(g),0);
     const prevDay=getPrevDay(day);
     const fondoBase=S.cierres?.[prevDay]?.saldo_siguiente||0;
     const cb=document.getElementById('cierre-editar-fondo');
@@ -672,13 +681,18 @@ function rProd(){
 }
 function setProdTab(t){prodTab=t;render();}
 
+function lotesMpcPendientes(){return S.coi.filter(x=>x.tipo_destino==='materia_prima_cruda'&&!x.usado);}
 function rCorte(){
   const todC=S.ct.filter(c=>c.day===day);
   const sgVOpts=sgV().map(g=>`<option value="${g.id}" data-u="${g.unit||'kg'}">${esc(g.name)} (${g.unit||'kg'})</option>`).join('');
-  const cards=todC.length?todC.map(c=>{const items=S.cti.filter(i=>i.corte_id===c.id);return`<div class="lote-card"><div class="lote-card-header"><div><div style="font-size:13px;font-weight:600">${esc(c.nombre)}</div><div style="font-size:10px;color:var(--tx3);font-family:var(--mo)">${c.time||''}</div></div><button class="dbtn" onclick="delCorte('${c.id}')">✕</button></div>${items.length?`<div class="lote-card-items">${items.map(i=>`<div style="font-size:10px;color:var(--tx2);padding:2px 0">+ ${fQ(i.qty,i.unit)} → ${esc(i.nombre)}</div>`).join('')}</div>`:''}</div>`;}).join(''):`<div class="empty-row">Sin cortes hoy</div>`;
-  return`<div class="info-box green">✂ Ingresá los kg de cada corte. Se suman al stock de venta sin agregar costos.</div>
+  const lotes=lotesMpcPendientes();
+  const loteOpts=lotes.map(l=>{const kg=l.qty_real||l.qty_compra,ckg=l.precio_total/kg;return`<option value="${l.id}" data-ckg="${ckg}" data-kg="${kg}">${esc(l.descripcion)} — ${fQ(kg,'kg')} — ${$d2(ckg)}/kg</option>`}).join('');
+  const cards=todC.length?todC.map(c=>{const items=S.cti.filter(i=>i.corte_id===c.id);return`<div class="lote-card"><div class="lote-card-header"><div><div style="font-size:13px;font-weight:600">${esc(c.nombre)}</div><div style="font-size:10px;color:var(--tx3);font-family:var(--mo)">${c.time||''}${c.origen_compra_item_id?' · con costeo':' · sin costeo'}</div></div><button class="dbtn" onclick="delCorte('${c.id}')">✕</button></div>${items.length?`<div class="lote-card-items">${items.map(i=>`<div style="font-size:10px;color:var(--tx2);padding:2px 0">+ ${fQ(i.qty,i.unit)} → ${esc(i.nombre)}${i.cost_unit_aplicado?' — '+$d2(i.cost_unit_aplicado)+'/kg':''}</div>`).join('')}</div>`:''}</div>`;}).join(''):`<div class="empty-row">Sin cortes hoy</div>`;
+  return`<div class="info-box green">✂ Elegí el lote de materia prima (cajón) del que sale este trozado — el costo/kg de ese lote se reparte igual entre todos los cortes que cargues. Si no elegís lote, se suma stock sin costo.</div>
   <div class="blk"><div class="bt">Nuevo corte</div>
     <div class="fr"><div class="fl" style="flex:2"><label>Nombre</label><input type="text" id="ct-n" placeholder="Ej: Corte mañana, Tanda 1..."></div><div class="fl"><label>Nota</label><input type="text" id="ct-note" placeholder="opcional"></div></div>
+    <div class="fr"><div class="fl" style="flex:2"><label>Lote de materia prima (cajón)</label><select id="ct-lote" onchange="onCtLote()"><option value="">Sin costeo (no hay factura de cajón)</option>${loteOpts}</select></div></div>
+    <div id="ct-lote-info" style="font-size:10px;color:var(--tx3);font-family:var(--mo);margin-top:2px"></div>
   </div>
   <div class="blk"><div class="bt">Cortes obtenidos</div>
     <div id="corte-items-list"></div>
@@ -687,6 +701,7 @@ function rCorte(){
   </div>
   <div class="sh">Cortes de hoy</div>${cards}`;
 }
+function onCtLote(){const sel=document.getElementById('ct-lote'),opt=sel?.options[sel.selectedIndex],info=document.getElementById('ct-lote-info');if(!info)return;if(sel?.value&&opt){info.textContent=`Costo del lote: ${$d2(parseFloat(opt.dataset.ckg))}/kg sobre ${fQ(parseFloat(opt.dataset.kg),'kg')} comprados`;}else{info.textContent='';}}
 function renderCorteItems(){
   const list=document.getElementById('corte-items-list');if(!list)return;
   if(!corteItems.length){list.innerHTML=`<div style="font-size:11px;color:var(--tx3);font-family:var(--mo);padding:4px 0">Sin cortes agregados</div>`;return;}
@@ -696,19 +711,25 @@ function addCorteItem(){const sel=document.getElementById('ci-grp'),opt=sel?.opt
 function rmCorteItem(i){corteItems.splice(i,1);renderCorteItems();}
 async function saveCorte(){
   const nom=document.getElementById('ct-n')?.value.trim(),note=document.getElementById('ct-note')?.value.trim();
+  const loteId=document.getElementById('ct-lote')?.value||null;
   if(!nom)return alert('Ingresá un nombre');if(!corteItems.length)return alert('Agregá al menos un corte');
-  const cId=uid(),corte={id:cId,day,nombre:nom,note:note||null,time:arTime()};
-  const items=corteItems.map(x=>({id:uid(),corte_id:cId,group_id:x.group_id,nombre:x.nombre,qty:x.qty,unit:x.unit}));
-  items.forEach(x=>{const g=S.sg.find(sg=>sg.id===x.group_id);if(g)g.stock_qty=(g.stock_qty||0)+x.qty;});
+  const lote=loteId?S.coi.find(x=>x.id===loteId):null;
+  const costoKg=lote?(lote.qty_real||lote.qty_compra)>0?lote.precio_total/(lote.qty_real||lote.qty_compra):0:0;
+  const cId=uid(),corte={id:cId,day,nombre:nom,note:note||null,origen_compra_item_id:loteId||null,time:arTime()};
+  const items=corteItems.map(x=>({id:uid(),corte_id:cId,group_id:x.group_id,nombre:x.nombre,qty:x.qty,unit:x.unit,cost_unit_aplicado:lote?costoKg:0}));
+  items.forEach(x=>{const g=S.sg.find(sg=>sg.id===x.group_id);if(!g)return;if(lote)applyCostoPonderado(g,x.qty,costoKg);else g.stock_qty=(g.stock_qty||0)+x.qty;});
+  if(lote)lote.usado=true;
   S.ct.push(corte);S.cti.push(...items);corteItems=[];save();render();
-  if(online){sync('busy','guardando...');try{await sbUp('cortes',corte);if(items.length)await sbUp('cortes_items',items);const ch=[...new Set(items.map(x=>x.group_id))];for(const gid of ch){const g=S.sg.find(x=>x.id===gid);if(g)await sbUp('stock_groups',{id:g.id,name:g.name,unit:g.unit,tipo:g.tipo,stock_qty:g.stock_qty,cost_unit:g.cost_unit||0});}sync('ok','guardado');}catch(e){sync('err','error')}}
+  if(online){sync('busy','guardando...');try{await sbUp('cortes',corte);if(items.length)await sbUp('cortes_items',items);if(lote)await sbUp('compras_items',{id:lote.id,compra_id:lote.compra_id,descripcion:lote.descripcion,tipo_destino:lote.tipo_destino,ref_id:lote.ref_id,qty_compra:lote.qty_compra,unit_compra:lote.unit_compra,qty_real:lote.qty_real,unit_real:lote.unit_real,precio_total:lote.precio_total,cost_unit_calculado:lote.cost_unit_calculado,usado:true});const ch=[...new Set(items.map(x=>x.group_id))];for(const gid of ch){const g=S.sg.find(x=>x.id===gid);if(g)await sbUp('stock_groups',{id:g.id,name:g.name,unit:g.unit,tipo:g.tipo,stock_qty:g.stock_qty,cost_unit:g.cost_unit||0});}sync('ok','guardado');}catch(e){sync('err','error');console.error(e)}}
 }
 async function delCorte(id){
-  if(!confirm('¿Eliminar? Se revertirá el stock.'))return;
+  if(!confirm('¿Eliminar? Se revertirá el stock (el costo/kg no se revierte con exactitud si ya se mezcló con otra entrada).'))return;
+  const corte=S.ct.find(x=>x.id===id);
   const items=S.cti.filter(x=>x.corte_id===id);
   items.forEach(x=>{const g=S.sg.find(sg=>sg.id===x.group_id);if(g)g.stock_qty=Math.max(0,(g.stock_qty||0)-x.qty);});
+  if(corte?.origen_compra_item_id){const lote=S.coi.find(x=>x.id===corte.origen_compra_item_id);if(lote)lote.usado=false;}
   S.ct=S.ct.filter(x=>x.id!==id);S.cti=S.cti.filter(x=>x.corte_id!==id);save();render();
-  if(online){try{await sbDel('cortes',id);const ch=[...new Set(items.map(x=>x.group_id))];for(const gid of ch){const g=S.sg.find(x=>x.id===gid);if(g)await sbUp('stock_groups',{id:g.id,name:g.name,unit:g.unit,tipo:g.tipo,stock_qty:g.stock_qty,cost_unit:g.cost_unit||0});}}catch(e){}}
+  if(online){try{await sbDel('cortes',id);const ch=[...new Set(items.map(x=>x.group_id))];for(const gid of ch){const g=S.sg.find(x=>x.id===gid);if(g)await sbUp('stock_groups',{id:g.id,name:g.name,unit:g.unit,tipo:g.tipo,stock_qty:g.stock_qty,cost_unit:g.cost_unit||0});}if(corte?.origen_compra_item_id){const lote=S.coi.find(x=>x.id===corte.origen_compra_item_id);if(lote)await sbUp('compras_items',{id:lote.id,compra_id:lote.compra_id,descripcion:lote.descripcion,tipo_destino:lote.tipo_destino,ref_id:lote.ref_id,qty_compra:lote.qty_compra,unit_compra:lote.unit_compra,qty_real:lote.qty_real,unit_real:lote.unit_real,precio_total:lote.precio_total,cost_unit_calculado:lote.cost_unit_calculado,usado:false});}}catch(e){}}
 }
 
 function rElab(){
@@ -764,7 +785,7 @@ async function saveElab(){
     if(x.tipo==='stock'){const g=S.sg.find(sg=>sg.id===x.ref_id);if(g)g.stock_qty=Math.max(0,(g.stock_qty||0)-x.qty);}
     else if(x.tipo==='insumo'){const ins=S.ins.find(i=>i.id===x.ref_id);if(ins)ins.stock_qty=Math.max(0,(ins.stock_qty||0)-x.qty);}
   });
-  if(outGid&&outQty>0){const og=S.sg.find(x=>x.id===outGid);if(og)og.stock_qty=(og.stock_qty||0)+outQty;}
+  if(outGid&&outQty>0){const og=S.sg.find(x=>x.id===outGid);if(og)applyCostoPonderado(og,outQty,costoInfo/outQty);}
   S.el.push(elab);S.eli.push(...items);elabItems=[];save();render();
   if(online){sync('busy','guardando...');try{await sbUp('elaboraciones',{id:elab.id,day:elab.day,nombre:elab.nombre,output_group_id:elab.output_group_id,output_qty:elab.output_qty,costo_total_info:elab.costo_total_info,note:elab.note,time:elab.time});if(items.length)await sbUp('elaboraciones_items',items);const ch=[...new Set([...(outGid?[outGid]:[]),...items.filter(x=>x.tipo==='stock').map(x=>x.ref_id)])];for(const gid of ch){const g=S.sg.find(x=>x.id===gid);if(g)await sbUp('stock_groups',{id:g.id,name:g.name,unit:g.unit,tipo:g.tipo,stock_qty:g.stock_qty,cost_unit:g.cost_unit||0});}sync('ok','guardado');}catch(e){sync('err','error')}}
 }
@@ -815,7 +836,7 @@ function rCompras(){
     <div id="cp-items-list"></div>
     <div class="sep"></div>
     <div style="font-size:9px;color:var(--tx2);font-family:var(--mo);margin-bottom:7px">AGREGAR ARTÍCULO</div>
-    <div class="fr"><div class="fl" style="flex:2"><label>Descripción</label><input type="text" id="ci-desc" placeholder="Ej: Cajón pollo, Pan rallado..."></div><div class="fl" style="max-width:110px"><label>Actualiza</label><select id="ci-tipo" onchange="onCiTipo()"><option value="sgv">Stock de venta</option><option value="ins">Insumo</option><option value="otro">Ninguno</option></select></div></div>
+    <div class="fr"><div class="fl" style="flex:2"><label>Descripción</label><input type="text" id="ci-desc" placeholder="Ej: Cajón pollo, Pan rallado..."></div><div class="fl" style="max-width:110px"><label>Actualiza</label><select id="ci-tipo" onchange="onCiTipo()"><option value="sgv">Stock de venta</option><option value="ins">Insumo</option><option value="mpc">Materia prima cruda (cajón)</option><option value="otro">Ninguno</option></select></div></div>
     <div class="fr" id="ci-item-row"><div class="fl"><label>Artículo</label><select id="ci-ref">${sgVOpts||'<option disabled>Sin grupos</option>'}</select></div></div>
     <div style="display:flex;gap:10px;margin-top:4px;flex-wrap:wrap">
       <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;font-family:var(--mo)"><input type="checkbox" id="ci-upd-stock" checked style="width:auto;accent-color:var(--ac)"> Actualizar stock</label>
@@ -850,7 +871,8 @@ function onCiTipo(){
   }
   calcCostoUnitario();
 }
-function calcCostoUnitario(){const precio=parseFloat(document.getElementById('ci-precio')?.value)||0,qtyR=parseFloat(document.getElementById('ci-qtyr')?.value)||0,qtyC=parseFloat(document.getElementById('ci-qtyc')?.value)||0,prev=document.getElementById('costo-preview');if(!prev)return;if(precio&&(qtyR||qtyC)){const base=qtyR||qtyC,costo=precio/base,refEl=document.getElementById('ci-ref'),unit=refEl?.options[refEl.selectedIndex]?.dataset?.u||'kg';prev.textContent=`→ Costo calculado: ${$d2(costo)}/${unit}`;prev.style.color='var(--ac)';}else{prev.textContent='';}}
+function ciCurrentUnit(){const tipo=document.getElementById('ci-tipo')?.value;if(tipo==='mpc')return'kg';const refEl=document.getElementById('ci-ref');return refEl?.options[refEl.selectedIndex]?.dataset?.u||'kg';}
+function calcCostoUnitario(){const precio=parseFloat(document.getElementById('ci-precio')?.value)||0,qtyR=parseFloat(document.getElementById('ci-qtyr')?.value)||0,qtyC=parseFloat(document.getElementById('ci-qtyc')?.value)||0,prev=document.getElementById('costo-preview');if(!prev)return;if(precio&&(qtyR||qtyC)){const base=qtyR||qtyC,costo=precio/base,unit=ciCurrentUnit();prev.textContent=`→ Costo calculado: ${$d2(costo)}/${unit}`;prev.style.color='var(--ac)';}else{prev.textContent='';}}
 function selAllProp(){sgV().forEach(g=>{const cb=document.getElementById('prop_'+g.id);if(cb)cb.checked=true;});}
 function renderCompraItems(){
   const list=document.getElementById('cp-items-list');if(!list)return;
@@ -866,9 +888,10 @@ function addCompraItem(){
   const qtyC=parseFloat(document.getElementById('ci-qtyc')?.value)||0,uc=document.getElementById('ci-uc')?.value.trim()||'unidad',qtyR=parseFloat(document.getElementById('ci-qtyr')?.value)||0,precio=parseFloat(document.getElementById('ci-precio')?.value)||0;
   const updStock=document.getElementById('ci-upd-stock')?.checked!==false,updCost=document.getElementById('ci-upd-cost')?.checked!==false;
   if(!desc||!qtyC||!precio)return alert('Completá descripción, cantidad y precio');
-  const unitReal=refOpt?.dataset?.u||'kg',base=qtyR||qtyC,costCalc=precio/base;
-  const isStock=tipo==='sgv',isIns=tipo==='ins',ref_id=refVal?.replace(/^(sgv_|ins_)/,'')||'';
-  compraItems.push({descripcion:desc,tipo_destino:isStock?'stock_venta':isIns?'insumo':'otro',ref_id,qty_compra:qtyC,unit_compra:uc,qty_real:qtyR||qtyC,unit_real:unitReal,precio_total:precio,cost_unit_calculado:costCalc,upd_stock:updStock,upd_cost:updCost});
+  if(tipo==='mpc'&&!qtyR)return alert('Para materia prima cruda, cargá los kg reales (cant. real)');
+  const unitReal=tipo==='mpc'?'kg':(refOpt?.dataset?.u||'kg'),base=qtyR||qtyC,costCalc=precio/base;
+  const isStock=tipo==='sgv',isIns=tipo==='ins',isMpc=tipo==='mpc',ref_id=refVal?.replace(/^(sgv_|ins_)/,'')||'';
+  compraItems.push({descripcion:desc,tipo_destino:isStock?'stock_venta':isIns?'insumo':isMpc?'materia_prima_cruda':'otro',ref_id,qty_compra:qtyC,unit_compra:uc,qty_real:qtyR||qtyC,unit_real:unitReal,precio_total:precio,cost_unit_calculado:costCalc,upd_stock:isMpc?false:updStock,upd_cost:isMpc?false:updCost,usado:false});
   document.getElementById('ci-desc').value='';document.getElementById('ci-qtyc').value='';document.getElementById('ci-qtyr').value='';document.getElementById('ci-precio').value='';
   const prev=document.getElementById('costo-preview');if(prev)prev.textContent='';renderCompraItems();
 }
@@ -885,19 +908,32 @@ async function saveCompra(){
   const compra={id:cId,day,proveedor:prov,nro_factura:fact||null,total,pago_efectivo:ef,pago_transferencia:tr,grupos_propagados:JSON.stringify(propagarA),gasto_id:gastoId,note:note||null,time:arTime()};
   const items=compraItems.map(x=>({id:uid(),compra_id:cId,...x}));
   items.forEach(x=>{
-    if(x.tipo_destino==='stock_venta'){const g=S.sg.find(sg=>sg.id===x.ref_id);if(g){if(x.upd_stock!==false)g.stock_qty=(g.stock_qty||0)+(x.qty_real||x.qty_compra);if(x.upd_cost!==false)g.cost_unit=x.cost_unit_calculado||g.cost_unit;}}
-    else if(x.tipo_destino==='insumo'){const ins=S.ins.find(i=>i.id===x.ref_id);if(ins){if(x.upd_stock!==false)ins.stock_qty=(ins.stock_qty||0)+(x.qty_real||x.qty_compra);if(x.upd_cost!==false){ins.costUnit=x.cost_unit_calculado||ins.costUnit;ins.cost_unit=ins.costUnit;}}}
+    if(x.tipo_destino==='stock_venta'){
+      const g=S.sg.find(sg=>sg.id===x.ref_id);if(!g)return;
+      const qty=x.qty_real||x.qty_compra;
+      if(x.upd_stock!==false&&x.upd_cost!==false)applyCostoPonderado(g,qty,x.cost_unit_calculado||g.cost_unit);
+      else if(x.upd_stock!==false)g.stock_qty=(g.stock_qty||0)+qty;
+      else if(x.upd_cost!==false)g.cost_unit=x.cost_unit_calculado||g.cost_unit;
+    }
+    else if(x.tipo_destino==='insumo'){
+      const ins=S.ins.find(i=>i.id===x.ref_id);if(!ins)return;
+      const qty=x.qty_real||x.qty_compra;
+      if(x.upd_stock!==false)ins.stock_qty=(ins.stock_qty||0)+qty;
+      if(x.upd_cost!==false){ins.costUnit=x.cost_unit_calculado||ins.costUnit;ins.cost_unit=ins.costUnit;}
+    }
+    // materia_prima_cruda: no toca stock, queda pendiente de trozar en Producción → Corte
   });
   propagarA.forEach(gid=>{const g=S.sg.find(x=>x.id===gid);if(g)g.cost_unit=costoKgGlobal;});
-  const gastoRow={id:gastoId,day,descripcion:'Compra: '+prov+(fact?' F/'+fact:''),cat:'Materia prima',amount:total,time:arTime()};
+  const gastoRow={id:gastoId,day,descripcion:'Compra: '+prov+(fact?' F/'+fact:''),cat:'Materia prima',amount:total,metodo:tr>ef?'transferencia':'efectivo',pago_efectivo:ef,pago_transferencia:tr,time:arTime()};
   if(!S.ga[day])S.ga[day]=[];S.ga[day].push(gastoRow);
   S.co.push(compra);S.coi.push(...items);compraItems=[];save();render();
   if(online){sync('busy','guardando...');try{await sbUp('compras',compra);if(items.length)await sbUp('compras_items',items);await sbUp('gastos',gastoRow);const ch=[...new Set([...items.map(x=>x.ref_id),...propagarA])];for(const id of ch){const g=S.sg.find(x=>x.id===id);if(g)await sbUp('stock_groups',{id:g.id,name:g.name,unit:g.unit,tipo:g.tipo,stock_qty:g.stock_qty,cost_unit:g.cost_unit||0});const ins=S.ins.find(x=>x.id===id);if(ins)await sbUp('insumos',{id:ins.id,name:ins.name,unit:ins.unit,cost_unit:ins.costUnit});}sync('ok','guardado');toast(`Costo/kg propagado a ${propagarA.length} grupo(s) ✓`);}catch(e){sync('err','error');console.error(e)}}
 }
 async function delCompra(id){
-  if(!confirm('¿Eliminar factura? Se revertirá el stock y el gasto.'))return;
   const c=S.co.find(x=>x.id===id);if(!c)return;
   const items=S.coi.filter(x=>x.compra_id===id);
+  if(items.some(x=>x.tipo_destino==='materia_prima_cruda'&&x.usado))return alert('No se puede eliminar: esta compra ya fue usada en un Corte. Eliminá primero el corte correspondiente.');
+  if(!confirm('¿Eliminar factura? Se revertirá el stock (el costo/kg no se puede revertir con exactitud si se mezcló con otras compras, revisalo a mano si hace falta).'))return;
   items.forEach(x=>{
     if(x.tipo_destino==='stock_venta'){const g=S.sg.find(sg=>sg.id===x.ref_id);if(g)g.stock_qty=Math.max(0,(g.stock_qty||0)-(x.qty_real||x.qty_compra));}
     else if(x.tipo_destino==='insumo'){const ins=S.ins.find(i=>i.id===x.ref_id);if(ins)ins.stock_qty=Math.max(0,(ins.stock_qty||0)-(x.qty_real||x.qty_compra));}
@@ -926,48 +962,48 @@ function calcEfTr(vs){
   return{ef,tr};
 }
 
-function mData(ym){
-  const vs=Object.entries(S.ve).filter(([d])=>d.startsWith(ym)).flatMap(([,v])=>v);
-  const tv=vs.reduce((s,v)=>s+v.total,0);
-  const{ef:tvEf,tr:tvTr}=calcEfTr(vs);
-  const byG={};vs.forEach(v=>{
+// Agrupa ventas por producto, repartiendo bien efectivo/transferencia incluso en tickets con pago mixto
+function calcByG(vs){
+  const ticketTot={};
+  vs.forEach(v=>{const tk=v.ticket_id||v.id;ticketTot[tk]=(ticketTot[tk]||0)+v.total;});
+  const byG={};
+  vs.forEach(v=>{
     const g=S.sg.find(x=>x.id===v.group_id),gn=g?g.name:'Otros';
-    if(!byG[gn])byG[gn]={qty:0,tot:0,ef:0,tr:0,unit:g?.unit||''};
+    if(!byG[gn])byG[gn]={qty:0,tot:0,ef:0,tr:0,costo:0,unit:g?.unit||''};
     byG[gn].qty+=(v.stock_used||0);byG[gn].tot+=v.total;
+    byG[gn].costo+=(v.stock_used||0)*(v.costo_unit_venta||0);
     if(v.pago==='Efectivo')byG[gn].ef+=v.total;
     else if(v.pago==='Transferencia')byG[gn].tr+=v.total;
-    // mixto: distribuir proporcionalmente por ítem no es posible sin duplicar, se asigna al total
-    else{byG[gn].tr+=v.total;}
+    else if(v.pago==='mixto'){
+      const tk=v.ticket_id||v.id,tkTot=ticketTot[tk]||v.total;
+      // proporción del ticket que fue efectivo/transferencia, aplicada a este ítem
+      const ratioEf=tkTot>0?(v.pago_ef||0)/tkTot:0,ratioTr=tkTot>0?(v.pago_tr||0)/tkTot:0;
+      byG[gn].ef+=v.total*ratioEf;byG[gn].tr+=v.total*ratioTr;
+    }
   });
-  const _compraIdsM=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));
-  const tg=Object.entries(S.ga).filter(([d])=>d.startsWith(ym)).flatMap(([,g])=>g).filter(g=>!_compraIdsM.has(g.id)).reduce((s,g)=>s+g.amount,0);
-  const tCompras=S.co.filter(c=>c.day.startsWith(ym)).reduce((s,c)=>s+c.total,0);
-  const movs=Object.entries(S.caja).filter(([d])=>d.startsWith(ym)).flatMap(([,m])=>m);
+  return byG;
+}
+// Motor único para día/mes — evita tener la misma lógica escrita dos veces
+function periodData(matchDay){
+  const vs=Object.entries(S.ve).filter(([d])=>matchDay(d)).flatMap(([,v])=>v);
+  const tv=vs.reduce((s,v)=>s+v.total,0);
+  const{ef:tvEf,tr:tvTr}=calcEfTr(vs);
+  const byG=calcByG(vs);
+  const costoVentasTotal=Object.values(byG).reduce((s,g)=>s+g.costo,0);
+  const margenBruto=tv-costoVentasTotal;
+  const _compraIds=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));
+  const tg=Object.entries(S.ga).filter(([d])=>matchDay(d)).flatMap(([,g])=>g).filter(g=>!_compraIds.has(g.id)).reduce((s,g)=>s+g.amount,0);
+  const tCompras=S.co.filter(c=>matchDay(c.day)).reduce((s,c)=>s+c.total,0);
+  const movs=Object.entries(S.caja).filter(([d])=>matchDay(d)).flatMap(([,m])=>m);
   const ingEf=movs.filter(m=>m.tipo==='ingreso'&&m.metodo==='efectivo').reduce((s,m)=>s+m.monto,0);
   const ingTr=movs.filter(m=>m.tipo==='ingreso'&&m.metodo==='transferencia').reduce((s,m)=>s+m.monto,0);
   const egEf=movs.filter(m=>m.tipo==='egreso'&&m.metodo==='efectivo').reduce((s,m)=>s+m.monto,0);
   const egTr=movs.filter(m=>m.tipo==='egreso'&&m.metodo==='transferencia').reduce((s,m)=>s+m.monto,0);
   const ingTotal=ingEf+ingTr,egTotal=egEf+egTr,resultado=tv+ingTotal-egTotal-tg-tCompras;
-  return{vs,tv,tvEf,tvTr,tg,tCompras,byG,ingEf,ingTr,egEf,egTr,ingTotal,egTotal,resultado};
+  return{vs,tv,tvEf,tvTr,tg,tCompras,byG,ingEf,ingTr,egEf,egTr,ingTotal,egTotal,resultado,costoVentasTotal,margenBruto};
 }
-function dayData(d){
-  const vs=S.ve[d]||[],tv=vs.reduce((s,v)=>s+v.total,0);
-  const{ef:tvEf,tr:tvTr}=calcEfTr(vs);
-  const byG={};vs.forEach(v=>{
-    const g=S.sg.find(x=>x.id===v.group_id),gn=g?g.name:'Otros';
-    if(!byG[gn])byG[gn]={qty:0,tot:0,ef:0,tr:0,unit:g?.unit||''};
-    byG[gn].qty+=(v.stock_used||0);byG[gn].tot+=v.total;
-    if(v.pago==='Efectivo')byG[gn].ef+=v.total;
-    else if(v.pago==='Transferencia')byG[gn].tr+=v.total;
-    else{byG[gn].tr+=v.total;}
-  });
-  const _compraIdsD=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));
-  const tg=(S.ga[d]||[]).filter(g=>!_compraIdsD.has(g.id)).reduce((s,g)=>s+g.amount,0);
-  const tCompras=S.co.filter(c=>c.day===d).reduce((s,c)=>s+c.total,0);
-  const movs=S.caja[d]||[];const ingTotal=movs.filter(m=>m.tipo==='ingreso').reduce((s,m)=>s+m.monto,0),egTotal=movs.filter(m=>m.tipo==='egreso').reduce((s,m)=>s+m.monto,0);
-  const ingEf=movs.filter(m=>m.tipo==='ingreso'&&m.metodo==='efectivo').reduce((s,m)=>s+m.monto,0),ingTr=movs.filter(m=>m.tipo==='ingreso'&&m.metodo==='transferencia').reduce((s,m)=>s+m.monto,0);
-  return{vs,tv,tvEf,tvTr:tv-tvEf,byG,tg,tCompras,ingTotal,egTotal,ingEf,ingTr,resultado:tv+ingTotal-egTotal-tg-tCompras};
-}
+function mData(ym){return periodData(d=>d.startsWith(ym));}
+function dayData(d0){return periodData(d=>d===d0);}
 function yrData(yr){const ms=[];for(let m=1;m<=12;m++){const ym=yr+'-'+m.toString().padStart(2,'0');const{tv,tg,tCompras,ingTotal,egTotal}=mData(ym);ms.push({lbl:fM(ym).split(' ')[0],tv,tg:tg+tCompras,res:tv+ingTotal-egTotal-tg-tCompras})}return ms}
 
 function rReportes(){
@@ -992,7 +1028,7 @@ function toggleDetail(id){const el=document.getElementById(id);if(el)el.style.di
 
 function rRepDia(){
   const{vs,tv,tvEf,tvTr,byG,tg,tCompras,ingTotal,egTotal,ingEf,ingTr,resultado}=dayData(day);
-  const bgRows=Object.entries(byG).sort((a,b)=>b[1].tot-a[1].tot).map(([n,d])=>`<tr><td>${esc(n)}</td><td style="font-family:var(--mo)">${fQ(d.qty,d.unit)}</td><td style="font-family:var(--mo)">${$m(d.tot)}</td><td style="font-family:var(--mo);color:var(--gn)">${$m(d.ef)}</td><td style="font-family:var(--mo);color:var(--bl)">${$m(d.tr)}</td></tr>`).join('')||`<tr><td colspan="5" class="empty-row">Sin ventas</td></tr>`;
+  const bgRows=Object.entries(byG).sort((a,b)=>b[1].tot-a[1].tot).map(([n,d])=>{const marg=d.tot-d.costo,margPct=d.tot>0?Math.round((marg/d.tot)*100):0;return`<tr><td>${esc(n)}</td><td style="font-family:var(--mo)">${fQ(d.qty,d.unit)}</td><td style="font-family:var(--mo)">${$m(d.tot)}</td><td style="font-family:var(--mo);color:var(--gn)">${$m(d.ef)}</td><td style="font-family:var(--mo);color:var(--bl)">${$m(d.tr)}</td><td style="font-family:var(--mo);color:var(--tx2)">${$m(d.costo)}</td><td style="font-family:var(--mo);color:${marg>=0?'var(--gn)':'var(--rd)'}">${$m(marg)} (${margPct}%)</td></tr>`;}).join('')||`<tr><td colspan="7" class="empty-row">Sin ventas</td></tr>`;
   // tickets del dia agrupados
   const byTicket={};vs.forEach(v=>{const tk=v.ticket_id||v.id;if(!byTicket[tk])byTicket[tk]={items:[],total:0,pago:v.pago,time:v.time||''};byTicket[tk].items.push(v);byTicket[tk].total+=v.total;});
   const tktRows=Object.entries(byTicket).sort((a,b)=>a[1].time.localeCompare(b[1].time)).map(([tid,tk])=>`<tr><td>${tk.time}</td><td>${tk.items.length} ítem(s)</td><td style="font-family:var(--mo)">${$m(tk.total)}</td><td><span class="tag tv">${(tk.pago||'').slice(0,3)}</span></td></tr>`).join('')||`<tr><td colspan="4" class="empty-row">Sin tickets</td></tr>`;
@@ -1008,7 +1044,7 @@ function rRepDia(){
   </div>
   <div id="det-vd" style="display:none">
     <div class="tbk"><div class="tt">Tickets del día</div><table><thead><tr><th>Hora</th><th>Ítems</th><th>Total</th><th>Pago</th></tr></thead><tbody>${tktRows}</tbody></table></div>
-    <div class="tbk"><div class="tt">Por grupo</div><table><thead><tr><th>Grupo</th><th>Cantidad</th><th>Total</th><th>Efectivo</th><th>Transf.</th></tr></thead><tbody>${bgRows}</tbody></table></div>
+    <div class="tbk"><div class="tt">Por grupo</div><table><thead><tr><th>Grupo</th><th>Cantidad</th><th>Total</th><th>Efectivo</th><th>Transf.</th><th>Costo</th><th>Margen</th></tr></thead><tbody>${bgRows}</tbody></table></div>
   </div>
   <div id="det-gd" style="display:none">
     ${tg>0?`<div class="tbk"><div class="tt">Gastos operativos</div><table><thead><tr><th>Hora</th><th>Descripción</th><th>Cat.</th><th>Monto</th></tr></thead><tbody>${gsRows}</tbody></table></div>`:''}
@@ -1024,7 +1060,7 @@ function rRepDia(){
 
 function rRepMes(mthTabs){
   const{tv,tvEf,tvTr,tg,tCompras,byG,ingEf,ingTr,egEf,egTr,ingTotal,egTotal,resultado}=mData(rMonth);
-  const bgRows=Object.entries(byG).sort((a,b)=>b[1].tot-a[1].tot).map(([n,d])=>`<tr><td>${esc(n)}</td><td style="font-family:var(--mo)">${fQ(d.qty,d.unit)}</td><td style="font-family:var(--mo)">${$m(d.tot)}</td><td style="font-family:var(--mo);color:var(--gn)">${$m(d.ef)}</td><td style="font-family:var(--mo);color:var(--bl)">${$m(d.tr)}</td></tr>`).join('')||`<tr><td colspan="5" class="empty-row">Sin datos</td></tr>`;
+  const bgRows=Object.entries(byG).sort((a,b)=>b[1].tot-a[1].tot).map(([n,d])=>{const marg=d.tot-d.costo,margPct=d.tot>0?Math.round((marg/d.tot)*100):0;return`<tr><td>${esc(n)}</td><td style="font-family:var(--mo)">${fQ(d.qty,d.unit)}</td><td style="font-family:var(--mo)">${$m(d.tot)}</td><td style="font-family:var(--mo);color:var(--gn)">${$m(d.ef)}</td><td style="font-family:var(--mo);color:var(--bl)">${$m(d.tr)}</td><td style="font-family:var(--mo);color:var(--tx2)">${$m(d.costo)}</td><td style="font-family:var(--mo);color:${marg>=0?'var(--gn)':'var(--rd)'}">${$m(marg)} (${margPct}%)</td></tr>`;}).join('')||`<tr><td colspan="7" class="empty-row">Sin datos</td></tr>`;
   const gastosMes=Object.entries(S.ga).filter(([d])=>d.startsWith(rMonth)).flatMap(([d,gs])=>gs.map(g=>({...g,_d:d})));
   const _compraIdsMes=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));
   const gsRows=gastosMes.filter(g=>!_compraIdsMes.has(g.id)).sort((a,b)=>a._d.localeCompare(b._d)).map(g=>`<tr><td>${fD(g._d)}</td><td>${esc(g.descripcion)}</td><td><span class="tag tg">${(g.cat||'').slice(0,5)}</span></td><td>${$m(g.amount)}</td></tr>`).join('')||`<tr><td colspan="4" class="empty-row">Sin gastos operativos</td></tr>`;
@@ -1037,7 +1073,7 @@ function rRepMes(mthTabs){
     <div class="kc"><div class="kl">Resultado</div><div class="kv ${resultado>=0?'g':'r'}">${$m(resultado)}</div></div>
   </div>
   <div id="det-vm" style="display:none">
-    <div class="tbk"><div class="tt">Ventas por grupo — ${fM(rMonth)}</div><table><thead><tr><th>Grupo</th><th>Cantidad</th><th>Total</th><th>Efectivo</th><th>Transf.</th></tr></thead><tbody>${bgRows}</tbody></table></div>
+    <div class="tbk"><div class="tt">Ventas por grupo — ${fM(rMonth)}</div><table><thead><tr><th>Grupo</th><th>Cantidad</th><th>Total</th><th>Efectivo</th><th>Transf.</th><th>Costo</th><th>Margen</th></tr></thead><tbody>${bgRows}</tbody></table></div>
   </div>
   <div id="det-gm" style="display:none">
     ${tg>0?`<div class="tbk"><div class="tt">Gastos operativos — ${fM(rMonth)}</div><table><thead><tr><th>Fecha</th><th>Descripción</th><th>Cat.</th><th>Monto</th></tr></thead><tbody>${gsRows}</tbody></table></div>`:''}
@@ -1063,6 +1099,24 @@ function rRepAnual(yr){
   <button class="btn btng" onclick="exportExcel()" style="width:100%;margin-top:6px">⬇ Exportar todo a Excel</button>`;
 }
 
+// Diferencias de caja (faltante/sobrante) acumuladas en el mes — para Reportes financieros
+function cierreDiffsForMonth(ym){
+  const dias=Object.keys(S.cierres||{}).filter(d=>d.startsWith(ym)).sort();
+  let totalDif=0;const detalle=[];
+  dias.forEach(d=>{
+    const c=S.cierres[d];
+    const vs=S.ve[d]||[];const{ef}=calcEfTr(vs);
+    const gaEf=(S.ga[d]||[]).reduce((s,g)=>s+gastoEf(g),0);
+    const prevDay=getPrevDay(d);
+    const fondo=c.fondo_inicial_manual!=null?c.fondo_inicial_manual:(S.cierres?.[prevDay]?.saldo_siguiente||0);
+    const deberia=fondo+ef-gaEf-(c.retiro||0);
+    const contadoNeto=Math.max(0,c.total_contado-(c.retiro||0));
+    const dif=contadoNeto-deberia;
+    totalDif+=dif;
+    if(Math.abs(dif)>=50)detalle.push({d,dif});
+  });
+  return{totalDif,detalle,diasCerrados:dias.length};
+}
 function rRepFin(mthTabs){
   const{tv,tvEf,tvTr,tg,tCompras,byG,ingEf,ingTr,egEf,egTr,ingTotal,egTotal,resultado}=mData(rMonth);
   const tGastoTotal=tg+tCompras;
@@ -1075,12 +1129,15 @@ function rRepFin(mthTabs){
   // compras como categoria propia
   if(tCompras>0)catGas['Materia prima (compras)']=(catGas['Materia prima (compras)']||0)+tCompras;
   const catRows=Object.entries(catGas).sort((a,b)=>b[1]-a[1]).map(([c,v])=>`<tr><td>${c}</td><td style="font-family:var(--mo)">${$m(v)}</td><td style="font-family:var(--mo);color:var(--tx3)">${Math.round(tGastoTotal>0?(v/tGastoTotal)*100:0)}%</td></tr>`).join('')||`<tr><td colspan="3" class="empty-row">Sin gastos</td></tr>`;
+  const{totalDif,detalle:difDetalle,diasCerrados}=cierreDiffsForMonth(rMonth);
+  const difRows=difDetalle.map(x=>`<tr><td>${x.d.slice(8,10)}/${x.d.slice(5,7)}</td><td style="font-family:var(--mo);color:${x.dif>=0?'var(--gn)':'var(--rd)'}">${x.dif>=0?'+':''}${$m(x.dif)}</td></tr>`).join('')||`<tr><td colspan="2" class="empty-row">Sin diferencias relevantes</td></tr>`;
   return`
   <div class="mtabs">${mthTabs}</div>
   <div class="kpis t3"><div class="kc hi"><div class="kl">Ingresos totales</div><div class="kv a">${$m(ingresoTotal)}</div><div class="kh">ventas + extra</div></div><div class="kc"><div class="kl">Gastos totales</div><div class="kv r">${$m(tGastoTotal)}</div><div class="kh" style="font-size:9px;color:var(--tx3)">op. ${$m(tg)} · comp. ${$m(tCompras)}</div></div><div class="kc"><div class="kl">Resultado</div><div class="kv ${resultado>=0?'g':'r'}">${$m(resultado)}</div></div></div>
   <div class="kpis t3"><div class="kc"><div class="kl">Margen</div><div class="kv" style="color:${margenCol}">${margen}%</div></div><div class="kc"><div class="kl">Efectivo total</div><div class="kv g" style="font-size:14px">${$m(tvEf+ingEf-egEf)}</div></div><div class="kc"><div class="kl">Digital total</div><div class="kv b" style="font-size:14px">${$m(tvTr+ingTr-egTr)}</div></div></div>
   ${ingTotal>0||egTotal>0?`<div class="blk"><div class="bt">Movimientos de caja del período</div><div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--br)"><span style="font-size:11px;color:var(--tx2)">Ingresos extra</span><span style="font-family:var(--mo);color:var(--gn)">${$m(ingTotal)}</span></div><div style="display:flex;justify-content:space-between;padding:5px 0"><span style="font-size:11px;color:var(--tx2)">Egresos extra</span><span style="font-family:var(--mo);color:var(--rd)">${$m(egTotal)}</span></div></div>`:''}
   <div class="tbk"><div class="tt">Gastos operativos por categoría</div><table><thead><tr><th>Categoría</th><th>Monto</th><th>%</th></tr></thead><tbody>${catRows}</tbody></table></div>
+  ${diasCerrados>0?`<div class="blk"><div class="bt">Diferencias de caja del mes (faltante/sobrante)</div><div style="display:flex;justify-content:space-between;padding:5px 0"><span style="font-size:11px;color:var(--tx2)">Acumulado (${diasCerrados} día${diasCerrados===1?'':'s'} cerrado${diasCerrados===1?'':'s'})</span><span style="font-family:var(--mo);font-weight:600;color:${totalDif>=0?'var(--gn)':'var(--rd)'}">${totalDif>=0?'+':''}${$m(totalDif)}</span></div></div><div class="tbk"><table><thead><tr><th>Día</th><th>Diferencia</th></tr></thead><tbody>${difRows}</tbody></table></div>`:''}
   <button class="btn btng" onclick="exportExcel()" style="width:100%;margin-top:6px">⬇ Exportar todo a Excel</button>`;
 }
 

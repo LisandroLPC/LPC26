@@ -59,6 +59,7 @@ create table ventas (
   price_unit numeric not null,
   descuento_pct numeric default 0,
   total numeric not null,
+  costo_unit_venta numeric default 0,
   pago text not null,
   time text,
   created_at timestamptz default now()
@@ -103,6 +104,7 @@ create table compras_items (
   unit_real text,
   precio_total numeric not null,
   cost_unit_calculado numeric,
+  usado boolean default false,
   created_at timestamptz default now()
 );
 
@@ -112,6 +114,7 @@ create table cortes (
   day date not null,
   nombre text not null,
   note text,
+  origen_compra_item_id text,
   time text,
   created_at timestamptz default now()
 );
@@ -123,6 +126,7 @@ create table cortes_items (
   nombre text not null,
   qty numeric not null,
   unit text,
+  cost_unit_aplicado numeric default 0,
   created_at timestamptz default now()
 );
 
@@ -159,6 +163,9 @@ create table gastos (
   descripcion text not null,
   cat text not null,
   amount numeric not null,
+  metodo text default 'efectivo',
+  pago_efectivo numeric default 0,
+  pago_transferencia numeric default 0,
   time text,
   created_at timestamptz default now()
 );

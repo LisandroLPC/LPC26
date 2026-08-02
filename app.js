@@ -810,7 +810,7 @@ function rInsumosBlk(){
   </div>`;
 }
 async function addIns(){const n=document.getElementById('ins-n')?.value.trim(),u=document.getElementById('ins-u')?.value,c=parseFloat(document.getElementById('ins-c')?.value)||0;if(!n||!c)return alert('Completá nombre y costo');if(S.ins.find(i=>i.name===n))return alert('Ya existe');const row={id:uid(),name:n,unit:u,costUnit:c,cost_unit:c,stock_qty:0};S.ins.push(row);save();render();if(online){try{await sbUp('insumos',{id:row.id,name:row.name,unit:row.unit,cost_unit:row.costUnit});sync('ok','guardado')}catch(e){sync('err','error')}}}
-async function updIns(id,v){const i=S.ins.find(x=>x.id===id);if(!i)return;i.costUnit=parseFloat(v)||0;i.cost_unit=i.costUnit;save();toast('Costo actualizado ✓');if(online){try{await sbUp('insumos',{id:i.id,name:i.name,unit:i.unit,cost_unit:i.costUnit});sync('ok','guardado')}catch(e){sync('err','error')}}}
+async function updIns(id,v){const i=S.ins.find(x=>x.id===id);if(!i)return;i.costUnit=parseFloat(v)||0;i.cost_unit=i.costUnit;save();toast('Costo actualizado ✓');if(online){try{await sbUp('insumos',{id:i.id,name:i.name,unit:i.unit,cost_unit:i.costUnit,stock_qty:i.stock_qty||0});sync('ok','guardado')}catch(e){sync('err','error')}}}
 async function delIns(id){S.ins=S.ins.filter(x=>x.id!==id);save();render();if(online){try{await sbDel('insumos',id)}catch(e){}}}
 
 /* ══ COMPRAS ══════════════════════════════════════════════════════ */
@@ -917,7 +917,7 @@ async function saveCompra(){
   const gastoRow={id:gastoId,day,descripcion:'Compra: '+prov+(fact?' F/'+fact:''),cat:'Materia prima',amount:total,metodo:tr>ef?'transferencia':'efectivo',pago_efectivo:ef,pago_transferencia:tr,usuario:sesion?.nombre||'—',time:arTime()};
   if(!S.ga[day])S.ga[day]=[];S.ga[day].push(gastoRow);
   S.co.push(compra);S.coi.push(...items);compraItems=[];save();render();
-  if(online){sync('busy','guardando...');try{await sbUp('compras',compra);if(items.length)await sbUp('compras_items',items);await sbUp('gastos',gastoRow);const ch=[...new Set(items.map(x=>x.ref_id).filter(Boolean))];for(const id of ch){const g=S.sg.find(x=>x.id===id);if(g)await sbUp('stock_groups',{id:g.id,name:g.name,unit:g.unit,tipo:g.tipo,stock_qty:g.stock_qty,cost_unit:g.cost_unit||0});const ins=S.ins.find(x=>x.id===id);if(ins)await sbUp('insumos',{id:ins.id,name:ins.name,unit:ins.unit,cost_unit:ins.costUnit});}sync('ok','guardado');}catch(e){sync('err','error');console.error(e)}}
+  if(online){sync('busy','guardando...');try{await sbUp('compras',compra);if(items.length)await sbUp('compras_items',items);await sbUp('gastos',gastoRow);const ch=[...new Set(items.map(x=>x.ref_id).filter(Boolean))];for(const id of ch){const g=S.sg.find(x=>x.id===id);if(g)await sbUp('stock_groups',{id:g.id,name:g.name,unit:g.unit,tipo:g.tipo,stock_qty:g.stock_qty,cost_unit:g.cost_unit||0});const ins=S.ins.find(x=>x.id===id);if(ins)await sbUp('insumos',{id:ins.id,name:ins.name,unit:ins.unit,cost_unit:ins.costUnit,stock_qty:ins.stock_qty||0});}sync('ok','guardado');}catch(e){sync('err','error');console.error(e)}}
 }
 async function delCompra(id){
   const c=S.co.find(x=>x.id===id);if(!c)return;

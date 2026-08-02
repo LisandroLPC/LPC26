@@ -818,7 +818,6 @@ function rCompras(){
   const sgVOpts=sgV().map(g=>`<option value="sgv_${g.id}" data-u="${g.unit||'kg'}">${esc(g.name)} (${g.unit||'kg'})</option>`).join('');
   const insOpts=S.ins.map(i=>`<option value="ins_${i.id}" data-u="${i.unit}">${esc(i.name)} (${i.unit})</option>`).join('');
   const allOpts=`<optgroup label="Stock de venta">${sgVOpts||'<option disabled>Sin grupos</option>'}</optgroup><optgroup label="Insumos">${insOpts||'<option disabled>Sin insumos</option>'}</optgroup>`;
-  const propOpts=sgV().map(g=>`<label style="display:flex;align-items:center;gap:5px;padding:4px 0;font-size:11px;cursor:pointer;font-family:var(--mo)"><input type="checkbox" id="prop_${g.id}" value="${g.id}" style="width:auto;accent-color:var(--ac)"> ${esc(g.name)}</label>`).join('');
   const cards=todC.length?todC.map(c=>{const items=S.coi.filter(i=>i.compra_id===c.id);const pi=[];if(c.pago_efectivo>0)pi.push(`Ef: ${$m(c.pago_efectivo)}`);if(c.pago_transferencia>0)pi.push(`Tr: ${$m(c.pago_transferencia)}`);
     return`<div class="lote-card"><div class="lote-card-header"><div><div style="font-size:13px;font-weight:600">${esc(c.proveedor)}</div><div style="font-size:10px;color:var(--tx3);font-family:var(--mo)">${c.time||''}${c.nro_factura?' · F/'+esc(c.nro_factura):''}</div>${pi.length?`<div style="font-size:10px;color:var(--tx2);font-family:var(--mo)">${pi.join(' + ')}</div>`:''}</div><div style="text-align:right"><div style="font-size:13px;font-family:var(--mo);color:var(--ac)">${$m(c.total)}</div><button class="dbtn" onclick="delCompra('${c.id}')" style="margin-top:3px">✕</button></div></div>
     ${items.length?`<div class="lote-card-items">${items.map(i=>`<div style="font-size:10px;color:var(--tx2);padding:2px 0">${esc(i.descripcion)}: ${i.qty_compra} ${i.unit_compra||''} ${i.qty_real?'→ '+fQ(i.qty_real,i.unit_real):''} — ${$m(i.precio_total)}${i.cost_unit_calculado?' ('+$d2(i.cost_unit_calculado)+'/'+i.unit_real+')':''}</div>`).join('')}</div>`:''}
@@ -846,11 +845,6 @@ function rCompras(){
     <div style="font-size:9px;color:var(--tx3);font-family:var(--mo);margin-top:3px" id="costo-preview"></div>
     <div style="font-size:9px;color:var(--tx3);font-family:var(--mo)">Cant. real = kg reales. Ej: 4 cajones → 74kg → costo/kg = total ÷ 74</div>
   </div>
-  ${sgV().length?`<div class="blk"><div class="bt">Propagar costo/kg a grupos de stock</div>
-    <div style="font-size:10px;color:var(--tx2);font-family:var(--mo);margin-bottom:8px">Marcá los grupos que deben actualizar su costo/kg con esta compra</div>
-    <div>${propOpts}</div>
-    <button class="btn" onclick="selAllProp()" style="font-size:11px;padding:4px 10px;margin-top:8px">Seleccionar todos</button>
-  </div>`:''}
   <button class="btn btnp" onclick="saveCompra()" style="width:100%;margin-top:4px">✓ Guardar factura</button>
   <div class="sh">Compras de hoy</div>${cards}`;
 }
@@ -873,7 +867,6 @@ function onCiTipo(){
 }
 function ciCurrentUnit(){const tipo=document.getElementById('ci-tipo')?.value;if(tipo==='mpc')return'kg';const refEl=document.getElementById('ci-ref');return refEl?.options[refEl.selectedIndex]?.dataset?.u||'kg';}
 function calcCostoUnitario(){const precio=parseFloat(document.getElementById('ci-precio')?.value)||0,qtyR=parseFloat(document.getElementById('ci-qtyr')?.value)||0,qtyC=parseFloat(document.getElementById('ci-qtyc')?.value)||0,prev=document.getElementById('costo-preview');if(!prev)return;if(precio&&(qtyR||qtyC)){const base=qtyR||qtyC,costo=precio/base,unit=ciCurrentUnit();prev.textContent=`→ Costo calculado: ${$d2(costo)}/${unit}`;prev.style.color='var(--ac)';}else{prev.textContent='';}}
-function selAllProp(){sgV().forEach(g=>{const cb=document.getElementById('prop_'+g.id);if(cb)cb.checked=true;});}
 function renderCompraItems(){
   const list=document.getElementById('cp-items-list');if(!list)return;
   if(!compraItems.length){list.innerHTML='';return;}
@@ -901,11 +894,8 @@ async function saveCompra(){
   const ef=parseFloat(document.getElementById('cp-ef')?.value)||0,tr=parseFloat(document.getElementById('cp-tr')?.value)||0;
   if(!prov)return alert('Ingresá el proveedor');if(!compraItems.length)return alert('Agregá al menos un artículo');
   const total=(ef+tr)||compraItems.reduce((s,x)=>s+x.precio_total,0);
-  const propagarA=sgV().filter(g=>{const cb=document.getElementById('prop_'+g.id);return cb&&cb.checked;}).map(g=>g.id);
-  const kgTotales=compraItems.reduce((s,x)=>s+(x.qty_real||x.qty_compra),0);
-  const costoKgGlobal=kgTotales>0?total/kgTotales:(compraItems[0]?.cost_unit_calculado||0);
   const cId=uid(),gastoId=uid();
-  const compra={id:cId,day,proveedor:prov,nro_factura:fact||null,total,pago_efectivo:ef,pago_transferencia:tr,grupos_propagados:JSON.stringify(propagarA),gasto_id:gastoId,note:note||null,time:arTime()};
+  const compra={id:cId,day,proveedor:prov,nro_factura:fact||null,total,pago_efectivo:ef,pago_transferencia:tr,gasto_id:gastoId,note:note||null,time:arTime()};
   const items=compraItems.map(x=>({id:uid(),compra_id:cId,...x}));
   items.forEach(x=>{
     if(x.tipo_destino==='stock_venta'){
@@ -923,11 +913,10 @@ async function saveCompra(){
     }
     // materia_prima_cruda: no toca stock, queda pendiente de trozar en Producción → Corte
   });
-  propagarA.forEach(gid=>{const g=S.sg.find(x=>x.id===gid);if(g)g.cost_unit=costoKgGlobal;});
   const gastoRow={id:gastoId,day,descripcion:'Compra: '+prov+(fact?' F/'+fact:''),cat:'Materia prima',amount:total,metodo:tr>ef?'transferencia':'efectivo',pago_efectivo:ef,pago_transferencia:tr,time:arTime()};
   if(!S.ga[day])S.ga[day]=[];S.ga[day].push(gastoRow);
   S.co.push(compra);S.coi.push(...items);compraItems=[];save();render();
-  if(online){sync('busy','guardando...');try{await sbUp('compras',compra);if(items.length)await sbUp('compras_items',items);await sbUp('gastos',gastoRow);const ch=[...new Set([...items.map(x=>x.ref_id),...propagarA])];for(const id of ch){const g=S.sg.find(x=>x.id===id);if(g)await sbUp('stock_groups',{id:g.id,name:g.name,unit:g.unit,tipo:g.tipo,stock_qty:g.stock_qty,cost_unit:g.cost_unit||0});const ins=S.ins.find(x=>x.id===id);if(ins)await sbUp('insumos',{id:ins.id,name:ins.name,unit:ins.unit,cost_unit:ins.costUnit});}sync('ok','guardado');toast(`Costo/kg propagado a ${propagarA.length} grupo(s) ✓`);}catch(e){sync('err','error');console.error(e)}}
+  if(online){sync('busy','guardando...');try{await sbUp('compras',compra);if(items.length)await sbUp('compras_items',items);await sbUp('gastos',gastoRow);const ch=[...new Set(items.map(x=>x.ref_id).filter(Boolean))];for(const id of ch){const g=S.sg.find(x=>x.id===id);if(g)await sbUp('stock_groups',{id:g.id,name:g.name,unit:g.unit,tipo:g.tipo,stock_qty:g.stock_qty,cost_unit:g.cost_unit||0});const ins=S.ins.find(x=>x.id===id);if(ins)await sbUp('insumos',{id:ins.id,name:ins.name,unit:ins.unit,cost_unit:ins.costUnit});}sync('ok','guardado');}catch(e){sync('err','error');console.error(e)}}
 }
 async function delCompra(id){
   const c=S.co.find(x=>x.id===id);if(!c)return;

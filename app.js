@@ -7,6 +7,8 @@ async function sbUp(t,d){const arr=Array.isArray(d)?d:[d];const r=await fetch(SB
 async function sbDel(t,id){const r=await fetch(SB+'/rest/v1/'+t+'?id=eq.'+encodeURIComponent(id),{method:'DELETE',headers:SBH});if(!r.ok)throw new Error(await r.text());}
 
 const LC={g(k){try{return JSON.parse(localStorage.getItem('lpc6_'+k))||null}catch{return null}},s(k,v){localStorage.setItem('lpc6_'+k,JSON.stringify(v))}};
+// La sesión de login vive en sessionStorage: se borra sola al cerrar la pestaña/navegador
+const SC={g(k){try{return JSON.parse(sessionStorage.getItem('lpc6_'+k))||null}catch{return null}},s(k,v){sessionStorage.setItem('lpc6_'+k,JSON.stringify(v))}};
 
 let S={
   us:LC.g('us')||[],sg:LC.g('sg')||[],vr:LC.g('vr')||[],
@@ -33,7 +35,7 @@ if(!S.cfg.gasCats||!Array.isArray(S.cfg.gasCats)||!S.cfg.gasCats.length)S.cfg.ga
 LC.s('cfg',S.cfg);
 
 let tab='caja',day=arDay(),online=navigator.onLine;
-let sesion=LC.g('sesion')||null;
+let sesion=SC.g('sesion')||null;
 let ticketItems=[],corteItems=[],elabItems=[],compraItems=[];
 let pagoSeleccionado='Efectivo';
 let charts={},rMonth=arMonth(),rTab='dia',prodTab='corte';
@@ -87,14 +89,13 @@ function upPD(){const el=document.getElementById('pin-display');if(el)el.textCon
 async function pinOk(){
   if(!pinBuf){document.getElementById('pin-error').textContent='Ingresá tu PIN';return;}
   let usr=S.us.find(u=>u.rol===loginRol&&u.pin===pinBuf&&u.activo!==false);
-  if(!usr){if(loginRol==='dueno'&&pinBuf==='1234')usr={id:'usr_dueno',nombre:'Dueño',rol:'dueno'};else if(loginRol==='empleado'&&pinBuf==='0000')usr={id:'usr_empleado',nombre:'Empleado',rol:'empleado'};}
   if(!usr){document.getElementById('pin-error').textContent='PIN incorrecto';pinBuf='';upPD();return;}
-  sesion={id:usr.id,nombre:usr.nombre,rol:usr.rol};LC.s('sesion',sesion);
+  sesion={id:usr.id,nombre:usr.nombre,rol:usr.rol};SC.s('sesion',sesion);
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app-screen').style.display='block';
   initApp();
 }
-function doLogout(){sesion=null;LC.s('sesion',null);pinBuf='';upPD();document.getElementById('login-screen').style.display='flex';document.getElementById('app-screen').style.display='none';}
+function doLogout(){sesion=null;SC.s('sesion',null);pinBuf='';upPD();document.getElementById('login-screen').style.display='flex';document.getElementById('app-screen').style.display='none';}
 
 const NAV_D=[{id:'caja',i:'💰',l:'Caja'},{id:'stock',i:'📦',l:'Stock'},{id:'prod',i:'🔪',l:'Prod.'},{id:'compras',i:'🛒',l:'Compras'},{id:'reportes',i:'📊',l:'Reportes'}];
 const NAV_E=[{id:'caja',i:'💰',l:'Caja'},{id:'gastos',i:'🧾',l:'Gastos'}];
@@ -647,7 +648,7 @@ async function updUsrNombre(id,v){
   const nombre=v.trim();if(!nombre)return;
   u.nombre=nombre;save();toast('Nombre actualizado ✓');
   // Actualizar sesión activa si es el usuario logueado
-  if(sesion&&sesion.id===id){sesion.nombre=nombre;LC.s('sesion',sesion);document.getElementById('hdr-sub').textContent='Hoy · '+fDL(day)+' · '+nombre;}
+  if(sesion&&sesion.id===id){sesion.nombre=nombre;SC.s('sesion',sesion);document.getElementById('hdr-sub').textContent='Hoy · '+fDL(day)+' · '+nombre;}
   if(online){try{await sbUp('usuarios',{id:u.id,nombre:u.nombre,pin:u.pin,rol:u.rol});sync('ok','guardado')}catch(e){sync('err','error')}}
 }
 async function updUsrPin(id,v){

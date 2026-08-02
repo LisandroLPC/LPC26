@@ -210,7 +210,7 @@ function rCaja(){
 
   const compraGastoIds=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));
   const gasOp=dG().filter(g=>!compraGastoIds.has(g.id));
-  const gaEf=gasOp.filter(g=>g.metodo!=='transferencia').reduce((s,g)=>s+g.amount,0);
+  const gaEf=dG().reduce((s,g)=>s+gastoEf(g),0);
   const gasRows=gasOp.length?gasOp.map(g=>`<tr><td>${g.time||''}</td><td style="max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(g.descripcion)}</td><td><span class="tag tg">${(g.cat||'').slice(0,5)}</span></td><td>${$m(g.amount)}</td><td><span class="tag ${g.metodo==='transferencia'?'tp':'tv'}">${g.metodo==='transferencia'?'Tr.':'Ef.'}</span></td><td><button class="dbtn" onclick="delGa('${g.id}')">✕</button></td></tr>`).join(''):`<tr><td colspan="6" class="empty-row">Sin gastos</td></tr>`;
 
   const mRows=movs.length?movs.map(m=>`<tr><td>${m.time||''}</td><td>${esc(m.descripcion)}</td><td><span class="tag ${m.tipo==='ingreso'?'tv':'tg'}">${m.tipo}</span></td><td style="color:${m.tipo==='ingreso'?'var(--gn)':'var(--rd)'}">${m.tipo==='ingreso'?'+':'-'}${$m(m.monto)}</td><td><span class="tag tp">${m.metodo.slice(0,3)}</span></td><td><button class="dbtn" onclick="delMov('${m.id}')">✕</button></td></tr>`).join(''):`<tr><td colspan="6" class="empty-row">Sin movimientos</td></tr>`;

@@ -205,7 +205,7 @@ function rCaja(){
       <td><div>${itemList}</div></td>
       <td style="font-weight:500">${$m(tk.total)}</td>
       <td>${pagoTag}</td>
-      <td><button class="dbtn" onclick="delTicket('${tid}')">✕</button></td>
+      <td>${sesion?.rol==='dueno'?`<button class="dbtn" onclick="delTicket('${tid}')">✕</button>`:''}</td>
     </tr>`;
   }).join(''):`<tr><td colspan="6" class="empty-row">Sin ventas</td></tr>`;
 
@@ -451,6 +451,7 @@ async function cerrarTicket(){
   }catch(e){sync('err','error')}}
 }
 async function delTicket(tid){
+  if(sesion?.rol!=='dueno')return alert('Solo el Dueño puede eliminar. Pedile que ingrese con su PIN para borrar esto.');
   if(!confirm('¿Eliminar este ticket? Se revertirá el stock.'))return;
   const vs=S.ve[day]||[],items=vs.filter(v=>(v.ticket_id||v.id)===tid);
   items.forEach(v=>{const g=S.sg.find(x=>x.id===v.group_id);if(g)g.stock_qty=(g.stock_qty||0)+(v.stock_used||0);});
@@ -469,7 +470,7 @@ async function addMov(){
   if(!S.caja[day])S.caja[day]=[];S.caja[day].push(row);save();render();
   if(online){sync('busy','guardando...');try{await sbUp('caja_movimientos',row);sync('ok','guardado')}catch(e){sync('err','error')}}
 }
-async function delMov(id){S.caja[day]=(S.caja[day]||[]).filter(x=>x.id!==id);save();render();if(online){try{await sbDel('caja_movimientos',id)}catch(e){}}}
+async function delMov(id){if(sesion?.rol!=='dueno')return alert('Solo el Dueño puede eliminar. Pedile que ingrese con su PIN para borrar esto.');S.caja[day]=(S.caja[day]||[]).filter(x=>x.id!==id);save();render();if(online){try{await sbDel('caja_movimientos',id)}catch(e){}}}
 
 /* Cierre de caja */
 function calcCierre(){
@@ -527,7 +528,7 @@ function saveCierre(){
 
 /* Gastos */
 async function addGa(){const d2=document.getElementById('g-d').value.trim(),c=document.getElementById('g-c').value,a=parseFloat(document.getElementById('g-a').value)||0,met=document.getElementById('g-met')?.value||'efectivo';if(!d2||!a)return alert('Completá descripción y monto');const row={id:uid(),day,descripcion:d2,cat:c,amount:a,metodo:met,usuario:sesion?.nombre||'—',time:arTime()};if(!S.ga[day])S.ga[day]=[];S.ga[day].push(row);save();render();if(online){sync('busy','guardando...');try{await sbUp('gastos',row);sync('ok','guardado')}catch(e){sync('err','error')}}}
-async function delGa(id){S.ga[day]=(S.ga[day]||[]).filter(x=>x.id!==id);save();render();if(online){try{await sbDel('gastos',id)}catch(e){}}}
+async function delGa(id){if(sesion?.rol!=='dueno')return alert('Solo el Dueño puede eliminar. Pedile que ingrese con su PIN para borrar esto.');S.ga[day]=(S.ga[day]||[]).filter(x=>x.id!==id);save();render();if(online){try{await sbDel('gastos',id)}catch(e){}}}
 function addGasCat(){const n=document.getElementById('gascat-n')?.value.trim();if(!n)return;if((S.cfg.gasCats||[]).includes(n))return alert('Ya existe');if(!S.cfg.gasCats)S.cfg.gasCats=[];S.cfg.gasCats.push(n);save();render();toast('Categoría agregada ✓');}
 function delGasCat(i){if(!confirm('¿Eliminar esta categoría?'))return;S.cfg.gasCats.splice(i,1);save();render();}
 function rGastos(){
@@ -724,6 +725,7 @@ async function saveCorte(){
   if(online){sync('busy','guardando...');try{await sbUp('cortes',corte);if(items.length)await sbUp('cortes_items',items);if(lote)await sbUp('compras_items',{id:lote.id,compra_id:lote.compra_id,descripcion:lote.descripcion,tipo_destino:lote.tipo_destino,ref_id:lote.ref_id,qty_compra:lote.qty_compra,unit_compra:lote.unit_compra,qty_real:lote.qty_real,unit_real:lote.unit_real,precio_total:lote.precio_total,cost_unit_calculado:lote.cost_unit_calculado,usado:true});const ch=[...new Set(items.map(x=>x.group_id))];for(const gid of ch){const g=S.sg.find(x=>x.id===gid);if(g)await sbUp('stock_groups',{id:g.id,name:g.name,unit:g.unit,tipo:g.tipo,stock_qty:g.stock_qty,cost_unit:g.cost_unit||0});}sync('ok','guardado');}catch(e){sync('err','error');console.error(e)}}
 }
 async function delCorte(id){
+  if(sesion?.rol!=='dueno')return alert('Solo el Dueño puede eliminar. Pedile que ingrese con su PIN para borrar esto.');
   if(!confirm('¿Eliminar? Se revertirá el stock (el costo/kg no se revierte con exactitud si ya se mezcló con otra entrada).'))return;
   const corte=S.ct.find(x=>x.id===id);
   const items=S.cti.filter(x=>x.corte_id===id);
@@ -791,6 +793,7 @@ async function saveElab(){
   if(online){sync('busy','guardando...');try{await sbUp('elaboraciones',{id:elab.id,day:elab.day,nombre:elab.nombre,output_group_id:elab.output_group_id,output_qty:elab.output_qty,costo_total_info:elab.costo_total_info,note:elab.note,time:elab.time});if(items.length)await sbUp('elaboraciones_items',items);const ch=[...new Set([...(outGid?[outGid]:[]),...items.filter(x=>x.tipo==='stock').map(x=>x.ref_id)])];for(const gid of ch){const g=S.sg.find(x=>x.id===gid);if(g)await sbUp('stock_groups',{id:g.id,name:g.name,unit:g.unit,tipo:g.tipo,stock_qty:g.stock_qty,cost_unit:g.cost_unit||0});}sync('ok','guardado');}catch(e){sync('err','error')}}
 }
 async function delElab(id){
+  if(sesion?.rol!=='dueno')return alert('Solo el Dueño puede eliminar. Pedile que ingrese con su PIN para borrar esto.');
   if(!confirm('¿Eliminar? Se revertirá el stock.'))return;
   const elab=S.el.find(x=>x.id===id);
   if(elab){const items=S.eli.filter(x=>x.elaboracion_id===id);items.forEach(x=>{if(x.tipo==='stock'){const g=S.sg.find(sg=>sg.id===x.ref_id);if(g)g.stock_qty=(g.stock_qty||0)+x.qty;}else if(x.tipo==='insumo'){const ins=S.ins.find(i=>i.id===x.ref_id);if(ins)ins.stock_qty=(ins.stock_qty||0)+x.qty;}});if(elab.output_group_id&&elab.output_qty){const og=S.sg.find(x=>x.id===elab.output_group_id);if(og)og.stock_qty=Math.max(0,(og.stock_qty||0)-elab.output_qty);}}
@@ -920,6 +923,7 @@ async function saveCompra(){
   if(online){sync('busy','guardando...');try{await sbUp('compras',compra);if(items.length)await sbUp('compras_items',items);await sbUp('gastos',gastoRow);const ch=[...new Set(items.map(x=>x.ref_id).filter(Boolean))];for(const id of ch){const g=S.sg.find(x=>x.id===id);if(g)await sbUp('stock_groups',{id:g.id,name:g.name,unit:g.unit,tipo:g.tipo,stock_qty:g.stock_qty,cost_unit:g.cost_unit||0});const ins=S.ins.find(x=>x.id===id);if(ins)await sbUp('insumos',{id:ins.id,name:ins.name,unit:ins.unit,cost_unit:ins.costUnit,stock_qty:ins.stock_qty||0});}sync('ok','guardado');}catch(e){sync('err','error');console.error(e)}}
 }
 async function delCompra(id){
+  if(sesion?.rol!=='dueno')return alert('Solo el Dueño puede eliminar. Pedile que ingrese con su PIN para borrar esto.');
   const c=S.co.find(x=>x.id===id);if(!c)return;
   const items=S.coi.filter(x=>x.compra_id===id);
   if(items.some(x=>x.tipo_destino==='materia_prima_cruda'&&x.usado))return alert('No se puede eliminar: esta compra ya fue usada en un Corte. Eliminá primero el corte correspondiente.');

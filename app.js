@@ -358,7 +358,7 @@ function rCaja(){
       <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;font-weight:700"><span>Diferencia</span><span style="font-family:var(--mo)" id="cierre-diferencia">—</span></div>
     </div>
     <button class="btn btnp" onclick="saveCierre()" style="width:100%">✓ Confirmar cierre</button>
-    ${cierreHoy?`<div style="margin-top:8px;padding:8px;background:var(--sf2);border-radius:5px;font-size:11px;font-family:var(--mo);color:var(--tx2)">Último cierre: ${$m(cierreHoy.total_contado)} contado · Retiro: ${$m(cierreHoy.retiro)} · Fondo siguiente: <span style="color:var(--gn)">${$m(cierreHoy.saldo_siguiente)}</span></div>`:''}
+    ${cierreHoy?`<div style="margin-top:8px;padding:8px;background:var(--sf2);border-radius:5px;font-size:11px;font-family:var(--mo);color:var(--tx2)">Último cierre: ${$m(cierreHoy.total_contado)} contado · Retiro: ${$m(cierreHoy.retiro)} · Fondo siguiente: <span style="color:var(--gn)">${$m(cierreHoy.saldo_siguiente)}</span>${cierreHoy.detalle?`<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:5px">${BILLETES.filter(b=>(cierreHoy.detalle[b]||0)>0).map(b=>`<span style="background:var(--sf);border-radius:4px;padding:2px 6px;font-size:10px">${cierreHoy.detalle[b]}× $${b.toLocaleString('es-AR')}</span>`).join('')}</div>`:''}</div>`:''}
   </div>`;
 }
 

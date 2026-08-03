@@ -216,6 +216,8 @@ select option{background:var(--sf)}
   border-radius:var(--r);overflow:hidden;margin-bottom:10px;
   box-shadow:var(--sh);
 }
+.tbk-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.tbk-hint{font-size:9px;color:var(--tx3);font-family:var(--mo);padding:0 13px 6px;text-align:right}
 .tt{
   font-size:9px;font-family:var(--mo);text-transform:uppercase;
   letter-spacing:.8px;color:var(--tx3);padding:11px 13px 0;font-weight:600;

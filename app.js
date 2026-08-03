@@ -740,7 +740,7 @@ function rElab(){
   const sgVOpts=sgV().map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join('');
   const insOpts=S.ins.map(i=>`<option value="${i.id}" data-cu="${i.costUnit||0}" data-u="${i.unit}">${esc(i.name)} (${$d2(i.costUnit||0)}/${i.unit})</option>`).join('');
   const allStOpts=sgV().map(g=>`<option value="sg_${g.id}" data-cu="${g.cost_unit||0}" data-u="${g.unit||'kg'}">${esc(g.name)} (costo: ${$d2(g.cost_unit||0)}/${g.unit||'kg'})</option>`).join('');
-  const cards=todE.length?todE.map(e=>{const outG=S.sg.find(x=>x.id===e.output_group_id),items=S.eli.filter(i=>i.elaboracion_id===e.id);return`<div class="lote-card"><div class="lote-card-header"><div><div style="font-size:13px;font-weight:600">${esc(e.nombre)}</div><div style="font-size:10px;color:var(--tx3);font-family:var(--mo)">${e.time||''}${outG?' → '+outG.name+' +'+fQ(e.output_qty,outG.unit):''}</div></div><div style="text-align:right"><div style="font-size:11px;font-family:var(--mo);color:var(--tx2)">Costo ref.: ${$m(e.costo_total_info||0)}</div><button class="dbtn" onclick="delElab('${e.id}')" style="margin-top:3px">✕</button></div></div>${items.length?`<div class="lote-card-items">${items.map(i=>`<div style="font-size:10px;color:var(--tx2);padding:2px 0">−${fQ(i.qty,i.unit)} ${esc(i.nombre)} — ref. ${$m(i.costo_subtotal||0)}</div>`).join('')}</div>`:''}</div>`;}).join(''):`<div class="empty-row">Sin elaboraciones hoy</div>`;
+  const cards=todE.length?todE.map(e=>{const outG=S.sg.find(x=>x.id===e.output_group_id),items=S.eli.filter(i=>i.elaboracion_id===e.id),costoKg=e.output_qty>0?(e.costo_total_info||0)/e.output_qty:0;return`<div class="lote-card"><div class="lote-card-header"><div><div style="font-size:13px;font-weight:600">${esc(e.nombre)}</div><div style="font-size:10px;color:var(--tx3);font-family:var(--mo)">${e.time||''}${outG?' → '+outG.name+' +'+fQ(e.output_qty,outG.unit):''}</div></div><div style="text-align:right"><div style="font-size:11px;font-family:var(--mo);color:var(--tx2)">Costo ref.: ${$m(e.costo_total_info||0)}</div>${outG?`<div style="font-size:10px;font-family:var(--mo);color:var(--ac)">${$m(costoKg)}/${outG.unit}</div>`:''}<button class="dbtn" onclick="delElab('${e.id}')" style="margin-top:3px">✕</button></div></div>${items.length?`<div class="lote-card-items">${items.map(i=>`<div style="font-size:10px;color:var(--tx2);padding:2px 0">−${fQ(i.qty,i.unit)} ${esc(i.nombre)} — ref. ${$m(i.costo_subtotal||0)}</div>`).join('')}</div>`:''}</div>`;}).join(''):`<div class="empty-row">Sin elaboraciones hoy</div>`;
   return`<div class="info-box amber">🍳 Los costos son <strong>solo referenciales</strong>. No generan gastos — ya están en las facturas de compra.</div>
   <div class="blk"><div class="bt">Nuevo lote de elaboración</div>
     <div class="fr"><div class="fl" style="flex:2"><label>Nombre</label><input type="text" id="el-n" placeholder="Ej: Milanesas tarde..."></div><div class="fl"><label>Nota</label><input type="text" id="el-note" placeholder=""></div></div>
@@ -1038,7 +1038,7 @@ function rRepDia(){
   </div>
   <div id="det-vd" style="display:none">
     <div class="tbk"><div class="tt">Tickets del día</div><table><thead><tr><th>Hora</th><th>Ítems</th><th>Total</th><th>Pago</th></tr></thead><tbody>${tktRows}</tbody></table></div>
-    <div class="tbk"><div class="tt">Por grupo</div><table><thead><tr><th>Grupo</th><th>Cantidad</th><th>Total</th><th>Efectivo</th><th>Transf.</th><th>Costo</th><th>Margen</th></tr></thead><tbody>${bgRows}</tbody></table></div>
+    <div class="tbk"><div class="tt">Por grupo</div><div class="tbk-hint">→ deslizá para ver Costo y Margen</div><div class="tbk-scroll"><table><thead><tr><th>Grupo</th><th>Cantidad</th><th>Total</th><th>Efectivo</th><th>Transf.</th><th>Costo</th><th>Margen</th></tr></thead><tbody>${bgRows}</tbody></table></div></div>
   </div>
   <div id="det-gd" style="display:none">
     ${tg>0?`<div class="tbk"><div class="tt">Gastos operativos</div><table><thead><tr><th>Hora</th><th>Descripción</th><th>Cat.</th><th>Monto</th></tr></thead><tbody>${gsRows}</tbody></table></div>`:''}
@@ -1067,7 +1067,7 @@ function rRepMes(mthTabs){
     <div class="kc"><div class="kl">Resultado</div><div class="kv ${resultado>=0?'g':'r'}">${$m(resultado)}</div></div>
   </div>
   <div id="det-vm" style="display:none">
-    <div class="tbk"><div class="tt">Ventas por grupo — ${fM(rMonth)}</div><table><thead><tr><th>Grupo</th><th>Cantidad</th><th>Total</th><th>Efectivo</th><th>Transf.</th><th>Costo</th><th>Margen</th></tr></thead><tbody>${bgRows}</tbody></table></div>
+    <div class="tbk"><div class="tt">Ventas por grupo — ${fM(rMonth)}</div><div class="tbk-hint">→ deslizá para ver Costo y Margen</div><div class="tbk-scroll"><table><thead><tr><th>Grupo</th><th>Cantidad</th><th>Total</th><th>Efectivo</th><th>Transf.</th><th>Costo</th><th>Margen</th></tr></thead><tbody>${bgRows}</tbody></table></div></div>
   </div>
   <div id="det-gm" style="display:none">
     ${tg>0?`<div class="tbk"><div class="tt">Gastos operativos — ${fM(rMonth)}</div><table><thead><tr><th>Fecha</th><th>Descripción</th><th>Cat.</th><th>Monto</th></tr></thead><tbody>${gsRows}</tbody></table></div>`:''}

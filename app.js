@@ -456,7 +456,7 @@ async function cerrarTicket(){
   const rows=ticketItems.map(x=>{const g=S.sg.find(sg=>sg.id===x.groupId);return{id:uid(),day,ticket_id:tktId,variant_id:x.varId,group_id:x.groupId,qty:x.qty,stock_used:x.stockUsed,price_unit:x.price,descuento_pct:x.desc,total:x.total,costo_unit_venta:g?.cost_unit||0,pago,pago_ef:ef,pago_tr:tr,usuario:sesion?.nombre||'—',time};});
   if(!S.ve[day])S.ve[day]=[];S.ve[day].push(...rows);
   // descontar stock
-  ticketItems.forEach(x=>{const g=S.sg.find(sg=>sg.id===x.groupId);if(g)g.stock_qty=Math.max(0,(g.stock_qty||0)-x.stockUsed);});
+  ticketItems.forEach(x=>{const g=S.sg.find(sg=>sg.id===x.groupId);if(g)g.stock_qty=(g.stock_qty||0)-x.stockUsed;});
   // registrar comision como gasto automatico
   if(comision>0){
     const gCom={id:uid(),day,descripcion:`Comisión ${mpLabel} (ticket ${time})`,cat:'Comisiones digitales',amount:comision,metodo:'transferencia',auto:true,time};
@@ -801,7 +801,7 @@ async function delCorte(id){
   if(!confirm('¿Eliminar? Se revertirá el stock (el costo/kg no se revierte con exactitud si ya se mezcló con otra entrada).'))return;
   const corte=S.ct.find(x=>x.id===id);
   const items=S.cti.filter(x=>x.corte_id===id);
-  items.forEach(x=>{const g=S.sg.find(sg=>sg.id===x.group_id);if(g)g.stock_qty=Math.max(0,(g.stock_qty||0)-x.qty);});
+  items.forEach(x=>{const g=S.sg.find(sg=>sg.id===x.group_id);if(g)g.stock_qty=(g.stock_qty||0)-x.qty;});
   if(corte?.origen_compra_item_id){const lote=S.coi.find(x=>x.id===corte.origen_compra_item_id);if(lote)lote.usado=false;}
   S.ct=S.ct.filter(x=>x.id!==id);S.cti=S.cti.filter(x=>x.corte_id!==id);save();render();
   if(online){try{await sbDel('cortes',id);const ch=[...new Set(items.map(x=>x.group_id))];for(const gid of ch){const g=S.sg.find(x=>x.id===gid);if(g)await sbUp('stock_groups',{id:g.id,name:g.name,unit:g.unit,tipo:g.tipo,stock_qty:g.stock_qty,cost_unit:g.cost_unit||0});}if(corte?.origen_compra_item_id){const lote=S.coi.find(x=>x.id===corte.origen_compra_item_id);if(lote)await sbUp('compras_items',{id:lote.id,compra_id:lote.compra_id,descripcion:lote.descripcion,tipo_destino:lote.tipo_destino,ref_id:lote.ref_id,qty_compra:lote.qty_compra,unit_compra:lote.unit_compra,qty_real:lote.qty_real,unit_real:lote.unit_real,precio_total:lote.precio_total,cost_unit_calculado:lote.cost_unit_calculado,usado:false});}}catch(e){}}
@@ -857,8 +857,8 @@ async function saveElab(){
   const eId=uid(),elab={id:eId,day,nombre:nom,output_group_id:outGid||null,output_qty:outQty,costo_total_info:costoInfo,note:note||null,usuario:sesion?.nombre||'—',time:arTime()};
   const items=elabItems.map(x=>({id:uid(),elaboracion_id:eId,tipo:x.tipo,ref_id:x.ref_id,nombre:x.nombre,qty:x.qty,unit:x.unit,costo_unit:x.costo_unit,costo_subtotal:x.costo_subtotal}));
   items.forEach(x=>{
-    if(x.tipo==='stock'){const g=S.sg.find(sg=>sg.id===x.ref_id);if(g)g.stock_qty=Math.max(0,(g.stock_qty||0)-x.qty);}
-    else if(x.tipo==='insumo'){const ins=S.ins.find(i=>i.id===x.ref_id);if(ins)ins.stock_qty=Math.max(0,(ins.stock_qty||0)-x.qty);}
+    if(x.tipo==='stock'){const g=S.sg.find(sg=>sg.id===x.ref_id);if(g)g.stock_qty=(g.stock_qty||0)-x.qty;}
+    else if(x.tipo==='insumo'){const ins=S.ins.find(i=>i.id===x.ref_id);if(ins)ins.stock_qty=(ins.stock_qty||0)-x.qty;}
   });
   if(outGid&&outQty>0){const og=S.sg.find(x=>x.id===outGid);if(og)applyCostoPonderado(og,outQty,costoInfo/outQty);}
   S.el.push(elab);S.eli.push(...items);elabItems=[];save();render();
@@ -868,7 +868,7 @@ async function delElab(id){
   if(sesion?.rol!=='dueno')return alert('Solo el Dueño puede eliminar. Pedile que ingrese con su PIN para borrar esto.');
   if(!confirm('¿Eliminar? Se revertirá el stock.'))return;
   const elab=S.el.find(x=>x.id===id);
-  if(elab){const items=S.eli.filter(x=>x.elaboracion_id===id);items.forEach(x=>{if(x.tipo==='stock'){const g=S.sg.find(sg=>sg.id===x.ref_id);if(g)g.stock_qty=(g.stock_qty||0)+x.qty;}else if(x.tipo==='insumo'){const ins=S.ins.find(i=>i.id===x.ref_id);if(ins)ins.stock_qty=(ins.stock_qty||0)+x.qty;}});if(elab.output_group_id&&elab.output_qty){const og=S.sg.find(x=>x.id===elab.output_group_id);if(og)og.stock_qty=Math.max(0,(og.stock_qty||0)-elab.output_qty);}}
+  if(elab){const items=S.eli.filter(x=>x.elaboracion_id===id);items.forEach(x=>{if(x.tipo==='stock'){const g=S.sg.find(sg=>sg.id===x.ref_id);if(g)g.stock_qty=(g.stock_qty||0)+x.qty;}else if(x.tipo==='insumo'){const ins=S.ins.find(i=>i.id===x.ref_id);if(ins)ins.stock_qty=(ins.stock_qty||0)+x.qty;}});if(elab.output_group_id&&elab.output_qty){const og=S.sg.find(x=>x.id===elab.output_group_id);if(og)og.stock_qty=(og.stock_qty||0)-elab.output_qty;}}
   S.el=S.el.filter(x=>x.id!==id);S.eli=S.eli.filter(x=>x.elaboracion_id!==id);save();render();
   if(online){try{await sbDel('elaboraciones',id);}catch(e){}}
 }
@@ -1001,8 +1001,8 @@ async function delCompra(id){
   if(items.some(x=>x.tipo_destino==='materia_prima_cruda'&&x.usado))return alert('No se puede eliminar: esta compra ya fue usada en un Corte. Eliminá primero el corte correspondiente.');
   if(!confirm('¿Eliminar factura? Se revertirá el stock (el costo/kg no se puede revertir con exactitud si se mezcló con otras compras, revisalo a mano si hace falta).'))return;
   items.forEach(x=>{
-    if(x.tipo_destino==='stock_venta'){const g=S.sg.find(sg=>sg.id===x.ref_id);if(g)g.stock_qty=Math.max(0,(g.stock_qty||0)-(x.qty_real||x.qty_compra));}
-    else if(x.tipo_destino==='insumo'){const ins=S.ins.find(i=>i.id===x.ref_id);if(ins)ins.stock_qty=Math.max(0,(ins.stock_qty||0)-(x.qty_real||x.qty_compra));}
+    if(x.tipo_destino==='stock_venta'){const g=S.sg.find(sg=>sg.id===x.ref_id);if(g)g.stock_qty=(g.stock_qty||0)-(x.qty_real||x.qty_compra);}
+    else if(x.tipo_destino==='insumo'){const ins=S.ins.find(i=>i.id===x.ref_id);if(ins)ins.stock_qty=(ins.stock_qty||0)-(x.qty_real||x.qty_compra);}
   });
   if(c.gasto_id){Object.keys(S.ga).forEach(d=>{S.ga[d]=(S.ga[d]||[]).filter(g=>g.id!==c.gasto_id);});if(online){try{await sbDel('gastos',c.gasto_id);}catch(e){}}}
   S.co=S.co.filter(x=>x.id!==id);S.coi=S.coi.filter(x=>x.compra_id!==id);save();render();

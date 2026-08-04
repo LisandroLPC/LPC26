@@ -230,21 +230,6 @@ function rCaja(){
     <div class="kc" style="border-color:rgba(46,155,212,.3);background:rgba(46,155,212,.04)"><div class="kl">Transferencias</div><div class="kv" style="color:var(--bl)">${$m(cajaTr)}</div></div>
   </div>
   ${fondoInicial>0?`<div class="info-box green">💵 Fondo inicial del día: ${$m(fondoInicial)}</div>`:''}
-  <div class="blk" style="border-color:rgba(46,155,212,.3)">
-    <div class="bt" style="color:var(--bl)">📱 Cierre digital — MP / Transferencia</div>
-    <div style="font-size:10px;color:var(--tx3);font-family:var(--mo);margin-bottom:8px">El fondo se arrastra solo día a día. Solo tocá el checkbox para corregirlo a mano.</div>
-    <label style="display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:6px"><input type="checkbox" id="cierre-editar-fondo-dig" onchange="toggleFondoDigEdit()" style="width:auto"> Corregir fondo inicial digital manualmente</label>
-    <div id="cierre-fondo-dig-manual-wrap" style="display:none;margin-bottom:8px"><input type="number" id="cierre-fondo-dig-manual" placeholder="Monto real" oninput="calcCierreDigital()"></div>
-    <div style="background:var(--sf2);border-radius:8px;padding:10px;margin-bottom:8px;border:1px solid var(--br)">
-      <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Fondo inicial digital</span><span style="font-family:var(--mo);color:var(--bl)" id="cierre-fondo-dig-cuenta">+${$m(fondoDigital)}</span></div>
-      <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Ventas digital</span><span style="font-family:var(--mo);color:var(--gn)">+${$m(tv-ef+ingTr-egTr)}</span></div>
-      <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Gastos/compras digital</span><span style="font-family:var(--mo);color:var(--rd)">-${$m(gaTr)}</span></div>
-      <div style="display:flex;justify-content:space-between;padding:5px 0 3px;border-top:1px solid var(--br);margin-top:4px;font-size:12px;font-weight:600"><span>Debería haber</span><span style="font-family:var(--mo);color:var(--bl)" id="cierre-deberia-dig">${$m(fondoDigital+(tv-ef)+ingTr-egTr-gaTr)}</span></div>
-    </div>
-    <div class="fl" style="margin-bottom:8px"><label>Saldo real en MP ahora (copiá el número de la app)</label><input type="number" id="cierre-real-dig" placeholder="0" value="${cierreHoy?.saldo_digital_real||''}" oninput="calcCierreDigital()"></div>
-    <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;font-weight:700"><span>Diferencia</span><span style="font-family:var(--mo)" id="cierre-diferencia-dig">—</span></div>
-    <button class="btn btnp" onclick="saveCierreDigital()" style="width:100%;margin-top:6px">✓ Confirmar cierre digital</button>
-  </div>
 
   <!-- TICKET -->
   <div class="blk" style="border-color:rgba(232,197,71,.4)">
@@ -376,6 +361,23 @@ function rCaja(){
     </div>
     <button class="btn btnp" onclick="saveCierre()" style="width:100%">✓ Confirmar cierre</button>
     ${cierreHoy?`<div style="margin-top:8px;padding:8px;background:var(--sf2);border-radius:5px;font-size:11px;font-family:var(--mo);color:var(--tx2)">Último cierre: ${$m(cierreHoy.total_contado)} contado · Retiro: ${$m(cierreHoy.retiro)} · Fondo siguiente: <span style="color:var(--gn)">${$m(cierreHoy.saldo_siguiente)}</span>${cierreHoy.detalle?`<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:5px">${BILLETES.filter(b=>(cierreHoy.detalle[b]||0)>0).map(b=>`<span style="background:var(--sf);border-radius:4px;padding:2px 6px;font-size:10px">${cierreHoy.detalle[b]}× $${b.toLocaleString('es-AR')}</span>`).join('')}</div>`:''}</div>`:''}
+  </div>
+
+  <!-- CIERRE DIGITAL -->
+  <div class="blk" style="border-color:rgba(46,155,212,.3)">
+    <div class="bt" style="color:var(--bl)">📱 Cierre digital — MP / Transferencia</div>
+    <div style="font-size:10px;color:var(--tx3);font-family:var(--mo);margin-bottom:8px">El fondo se arrastra solo día a día. Solo tocá el checkbox para corregirlo a mano.</div>
+    <label style="display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:6px"><input type="checkbox" id="cierre-editar-fondo-dig" onchange="toggleFondoDigEdit()" style="width:auto"> Corregir fondo inicial digital manualmente</label>
+    <div id="cierre-fondo-dig-manual-wrap" style="display:none;margin-bottom:8px"><input type="number" id="cierre-fondo-dig-manual" placeholder="Monto real" oninput="calcCierreDigital()"></div>
+    <div style="background:var(--sf2);border-radius:8px;padding:10px;margin-bottom:8px;border:1px solid var(--br)">
+      <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Fondo inicial digital</span><span style="font-family:var(--mo);color:var(--bl)" id="cierre-fondo-dig-cuenta">+${$m(fondoDigital)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Ventas digital</span><span style="font-family:var(--mo);color:var(--gn)">+${$m(tv-ef+ingTr-egTr)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Gastos/compras digital</span><span style="font-family:var(--mo);color:var(--rd)">-${$m(gaTr)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:5px 0 3px;border-top:1px solid var(--br);margin-top:4px;font-size:12px;font-weight:600"><span>Debería haber</span><span style="font-family:var(--mo);color:var(--bl)" id="cierre-deberia-dig">${$m(fondoDigital+(tv-ef)+ingTr-egTr-gaTr)}</span></div>
+    </div>
+    <div class="fl" style="margin-bottom:8px"><label>Saldo real en MP ahora (copiá el número de la app)</label><input type="number" id="cierre-real-dig" placeholder="0" value="${cierreHoy?.saldo_digital_real||''}" oninput="calcCierreDigital()"></div>
+    <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;font-weight:700"><span>Diferencia</span><span style="font-family:var(--mo)" id="cierre-diferencia-dig">—</span></div>
+    <button class="btn btnp" onclick="saveCierreDigital()" style="width:100%;margin-top:6px">✓ Confirmar cierre digital</button>
   </div>`;
 }
 

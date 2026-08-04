@@ -129,7 +129,7 @@ async function loadAll(){
       const cm2={};
       cierresArr.forEach(c=>{
         const d=typeof c.day==='string'?c.day.slice(0,10):c.day;
-        cm2[d]={total_contado:c.total_contado,retiro:c.retiro,saldo_siguiente:c.saldo_siguiente,fondo_inicial_manual:c.fondo_inicial_manual,detalle:c.detalle||{},time:c.time};
+        cm2[d]={total_contado:c.total_contado,retiro:c.retiro,saldo_siguiente:c.saldo_siguiente,fondo_inicial_manual:c.fondo_inicial_manual,fondo_digital_manual:c.fondo_digital_manual,saldo_digital_real:c.saldo_digital_real,saldo_digital_siguiente:c.saldo_digital_siguiente,detalle:c.detalle||{},time:c.time};
       });
       // Merge: no pisar cierres locales que no estén en Supabase aún
       S.cierres={...cm2,...Object.fromEntries(Object.entries(S.cierres).filter(([d])=>!cm2[d]))};
@@ -379,6 +379,7 @@ function rCaja(){
     <div class="fl" style="margin-bottom:8px"><label>Saldo real en MP ahora (copiá el número de la app)</label><input type="number" id="cierre-real-dig" placeholder="0" value="${cierreHoy?.saldo_digital_real||''}" oninput="calcCierreDigital()"></div>
     <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;font-weight:700"><span>Diferencia</span><span style="font-family:var(--mo)" id="cierre-diferencia-dig">—</span></div>
     <button class="btn btnp" onclick="saveCierreDigital()" style="width:100%;margin-top:6px">✓ Confirmar cierre digital</button>
+    ${cierreHoy?.saldo_digital_real!=null?`<div style="margin-top:8px;padding:8px;background:var(--sf2);border-radius:5px;font-size:11px;font-family:var(--mo);color:var(--tx2)">Último cierre digital: ${$m(cierreHoy.saldo_digital_real)} real · Fondo siguiente: <span style="color:var(--bl)">${$m(cierreHoy.saldo_digital_siguiente)}</span></div>`:`<div style="margin-top:8px;font-size:10px;color:var(--tx3);font-family:var(--mo)">Todavía no confirmaste el cierre digital de este día.</div>`}
   </div>`;
 }
 

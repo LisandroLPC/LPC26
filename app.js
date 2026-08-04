@@ -1027,7 +1027,7 @@ function setRTab(t){rTab=t;go('reportes')}
 function toggleDetail(id){const el=document.getElementById(id);if(el)el.style.display=el.style.display==='none'?'block':'none';}
 
 function rRepDia(){
-  const{vs,tv,tvEf,tvTr,byG,tg,tCompras,ingTotal,egTotal,ingEf,ingTr,resultado}=dayData(day);
+  const{vs,tv,tvEf,tvTr,byG,tg,tCompras,ingTotal,egTotal,ingEf,ingTr,egEf,egTr,resultado}=dayData(day);
   const bgRows=Object.entries(byG).sort((a,b)=>b[1].tot-a[1].tot).map(([n,d])=>{const marg=d.tot-d.costo,margPct=d.tot>0?Math.round((marg/d.tot)*100):0;return`<tr><td>${esc(n)}</td><td style="font-family:var(--mo)">${fQ(d.qty,d.unit)}</td><td style="font-family:var(--mo)">${$m(d.tot)}</td><td style="font-family:var(--mo);color:var(--gn)">${$m(d.ef)}</td><td style="font-family:var(--mo);color:var(--bl)">${$m(d.tr)}</td><td style="font-family:var(--mo);color:var(--tx2)">${$m(d.costo)}</td><td style="font-family:var(--mo);color:${marg>=0?'var(--gn)':'var(--rd)'}">${$m(marg)} (${margPct}%)</td></tr>`;}).join('')||`<tr><td colspan="7" class="empty-row">Sin ventas</td></tr>`;
   // tickets del dia agrupados
   const byTicket={};vs.forEach(v=>{const tk=v.ticket_id||v.id;if(!byTicket[tk])byTicket[tk]={items:[],total:0,pago:v.pago,time:v.time||''};byTicket[tk].items.push(v);byTicket[tk].total+=v.total;});
@@ -1052,8 +1052,8 @@ function rRepDia(){
     ${!tg&&!compHoy?`<div style="font-size:11px;color:var(--tx3);font-family:var(--mo);padding:8px 0">Sin gastos ni compras</div>`:''}
   </div>
   <div class="kpis">
-    <div class="kc"><div class="kl">Efectivo</div><div class="kv g">${$m(tvEf+ingEf)}</div></div>
-    <div class="kc"><div class="kl">Digital</div><div class="kv b">${$m(tvTr+ingTr)}</div></div>
+    <div class="kc"><div class="kl">Efectivo</div><div class="kv g">${$m(tvEf+ingEf-egEf)}</div></div>
+    <div class="kc"><div class="kl">Digital</div><div class="kv b">${$m(tvTr+ingTr-egTr)}</div></div>
   </div>
   <button class="btn btng" onclick="exportExcel()" style="width:100%;margin-top:6px">⬇ Exportar todo a Excel</button>`;
 }

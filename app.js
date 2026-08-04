@@ -180,7 +180,7 @@ function rCaja(){
   const egTr=movs.filter(m=>m.tipo==='egreso'&&m.metodo==='transferencia').reduce((s,m)=>s+m.monto,0);
   const ga=dG().reduce((s,g)=>s+g.amount,0);
   const cajaEf=ef+ingEf-egEf;
-  const cajaTr=(tv-ef)+ingTr-egTr;
+  const cajaTr=(tv-ef)+ingTr-egTr+fondoDigital;
   const resultado=tv+ingEf+ingTr-egEf-egTr-ga;
 
   // ticket en proceso
@@ -220,6 +220,7 @@ function rCaja(){
   const cierrePrev=S.cierres?.[prevDay];
   const cierreHoy=S.cierres?.[day];
   const fondoInicial=cierreHoy?.fondo_inicial_manual??cierrePrev?.saldo_siguiente??0;
+  const fondoDigital=cierreHoy?.fondo_digital_manual??0;
 
   return`
   <div class="kpis">
@@ -229,6 +230,14 @@ function rCaja(){
     <div class="kc" style="border-color:rgba(46,155,212,.3);background:rgba(46,155,212,.04)"><div class="kl">Transferencias</div><div class="kv" style="color:var(--bl)">${$m(cajaTr)}</div></div>
   </div>
   ${fondoInicial>0?`<div class="info-box green">💵 Fondo inicial del día: ${$m(fondoInicial)}</div>`:''}
+  <div class="info-box" style="border-color:rgba(46,155,212,.3);background:rgba(46,155,212,.04)">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <span style="color:var(--bl)">📱 Fondo inicial digital (MP/reserva):</span>
+      <input type="number" id="fondo-digital-inp" value="${fondoDigital||''}" placeholder="0" style="max-width:110px">
+      <button class="btn" onclick="saveFondoDigital()" style="padding:5px 10px;font-size:11px">Guardar</button>
+    </div>
+    <div style="font-size:9px;color:var(--tx3);font-family:var(--mo);margin-top:4px">No hace falta cerrar caja para esto — declaralo cuando quieras, se suma a "Transferencias" arriba.</div>
+  </div>
 
   <!-- TICKET -->
   <div class="blk" style="border-color:rgba(232,197,71,.4)">
@@ -514,6 +523,19 @@ function toggleFondoEdit(){
   if(disp)disp.style.display=cb?.checked?'none':'inline';
   calcCierre();
 }
+async function saveFondoDigital(){
+  const v=parseFloat(document.getElementById('fondo-digital-inp')?.value)||0;
+  if(!S.cierres)S.cierres={};
+  const prev=S.cierres[day]||{total_contado:0,detalle:{},retiro:0,saldo_siguiente:0,fondo_inicial_manual:undefined,time:arTime()};
+  S.cierres[day]={...prev,fondo_digital_manual:v};
+  save();render();toast('Fondo digital guardado ✓');
+  if(online){
+    const c=S.cierres[day];
+    const row={id:'cierre_'+day,day,total_contado:c.total_contado,retiro:c.retiro,saldo_siguiente:c.saldo_siguiente,fondo_inicial_manual:c.fondo_inicial_manual??null,fondo_digital_manual:v,detalle:JSON.stringify(c.detalle||{}),time:c.time};
+    sync('busy','guardando...');
+    try{await sbUp('cierres',row);sync('ok','guardado')}catch(e){sync('err','error')}
+  }
+}
 function saveCierre(){
   let total=0;const detalle={};
   BILLETES.forEach(b=>{const q=parseInt(document.getElementById('bill_'+b)?.value)||0;detalle[b]=q;total+=q*b;});
@@ -522,12 +544,13 @@ function saveCierre(){
   if(total===0)return alert('Contá al menos un billete');
   const cb=document.getElementById('cierre-editar-fondo');
   const fondoManualVal=cb?.checked?parseFloat(document.getElementById('cierre-fondo-manual')?.value)||0:undefined;
+  const fondoDigitalPrev=S.cierres?.[day]?.fondo_digital_manual;
   if(!S.cierres)S.cierres={};
-  S.cierres[day]={total_contado:total,detalle,retiro,saldo_siguiente:saldo,fondo_inicial_manual:fondoManualVal,time:arTime()};
+  S.cierres[day]={total_contado:total,detalle,retiro,saldo_siguiente:saldo,fondo_inicial_manual:fondoManualVal,fondo_digital_manual:fondoDigitalPrev,time:arTime()};
   save();render();toast('Cierre guardado ✓ — Fondo siguiente: '+$m(saldo));
   // Persistir cierre en Supabase
   if(online){
-    const row={id:'cierre_'+day,day,total_contado:total,retiro,saldo_siguiente:saldo,fondo_inicial_manual:fondoManualVal??null,detalle:JSON.stringify(detalle),time:arTime()};
+    const row={id:'cierre_'+day,day,total_contado:total,retiro,saldo_siguiente:saldo,fondo_inicial_manual:fondoManualVal??null,fondo_digital_manual:fondoDigitalPrev??null,detalle:JSON.stringify(detalle),time:arTime()};
     sbUp('cierres',row).catch(e=>console.error('Error guardando cierre:',e));
   }
 }
@@ -1053,7 +1076,7 @@ function rRepDia(){
   </div>
   <div class="kpis">
     <div class="kc"><div class="kl">Efectivo</div><div class="kv g">${$m(tvEf+ingEf-egEf)}</div></div>
-    <div class="kc"><div class="kl">Digital</div><div class="kv b">${$m(tvTr+ingTr-egTr)}</div></div>
+    <div class="kc"><div class="kl">Digital</div><div class="kv b">${$m(tvTr+ingTr-egTr+(S.cierres?.[day]?.fondo_digital_manual||0))}</div></div>
   </div>
   <button class="btn btng" onclick="exportExcel()" style="width:100%;margin-top:6px">⬇ Exportar todo a Excel</button>`;
 }

@@ -351,9 +351,10 @@ function rCaja(){
       <div style="font-size:9px;color:var(--tx2);font-family:var(--mo);margin-bottom:7px;letter-spacing:.5px">CUENTA DEL DÍA — EFECTIVO</div>
       <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Fondo inicial</span><span style="font-family:var(--mo);color:var(--gn)" id="cierre-fondo-cuenta">+${$m(fondoInicial)}</span></div>
       <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Ventas efectivo</span><span style="font-family:var(--mo);color:var(--gn)">+${$m(ef)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Ingresos/egresos manuales (ef.)</span><span style="font-family:var(--mo);color:${(ingEf-egEf)>=0?'var(--gn)':'var(--rd)'}" id="cierre-mov-cuenta">${(ingEf-egEf)>=0?'+':''}${$m(ingEf-egEf)}</span></div>
       <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Gastos en efectivo</span><span style="font-family:var(--mo);color:var(--rd)">-${$m(gaEf)}</span></div>
       <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Retiro</span><span style="font-family:var(--mo);color:var(--rd)" id="cierre-retiro-display">-${$m(cierreHoy?.retiro||0)}</span></div>
-      <div style="display:flex;justify-content:space-between;padding:5px 0 3px;border-top:1px solid var(--br);margin-top:4px;font-size:12px;font-weight:600"><span>Debería haber</span><span style="font-family:var(--mo);color:var(--ac)" id="cierre-deberia">${$m(fondoInicial+ef-gaEf-(cierreHoy?.retiro||0))}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:5px 0 3px;border-top:1px solid var(--br);margin-top:4px;font-size:12px;font-weight:600"><span>Debería haber</span><span style="font-family:var(--mo);color:var(--ac)" id="cierre-deberia">${$m(fondoInicial+ef+(ingEf-egEf)-gaEf-(cierreHoy?.retiro||0))}</span></div>
       <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Queda en caja</span><span style="font-family:var(--mo)" id="cierre-contado-disp">$0</span></div>
       <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;font-weight:700"><span>Diferencia</span><span style="font-family:var(--mo)" id="cierre-diferencia">—</span></div>
     </div>
@@ -486,6 +487,11 @@ function calcCierre(){
   if(deberiaEl){
     const vs=dV();const{ef}=calcEfTr(vs);
     const gaEf=(S.ga[day]||[]).reduce((s,g)=>s+gastoEf(g),0);
+    const movs=dCaja();
+    const ingEf=movs.filter(m=>m.tipo==='ingreso'&&m.metodo==='efectivo').reduce((s,m)=>s+m.monto,0);
+    const egEf=movs.filter(m=>m.tipo==='egreso'&&m.metodo==='efectivo').reduce((s,m)=>s+m.monto,0);
+    const movCuenta=document.getElementById('cierre-mov-cuenta');
+    if(movCuenta){const nm=ingEf-egEf;movCuenta.textContent=(nm>=0?'+':'')+$m(nm);movCuenta.style.color=nm>=0?'var(--gn)':'var(--rd)';}
     const prevDay=getPrevDay(day);
     const fondoBase=S.cierres?.[prevDay]?.saldo_siguiente||0;
     const cb=document.getElementById('cierre-editar-fondo');
@@ -494,7 +500,7 @@ function calcCierre(){
     // actualizar la línea de fondo en la cuenta
     const fondoCuenta=document.getElementById('cierre-fondo-cuenta');
     if(fondoCuenta)fondoCuenta.textContent='+'+$m(fondo);
-    const deberia=fondo+ef-gaEf-retiro;
+    const deberia=fondo+ef+(ingEf-egEf)-gaEf-retiro;
     deberiaEl.textContent=$m(deberia);
     if(contEl)contEl.textContent=$m(Math.max(0,total-retiro));
     if(difEl){const dif=Math.max(0,total-retiro)-deberia;difEl.textContent=(dif>=0?'+':'')+$m(dif);difEl.style.color=Math.abs(dif)<50?'var(--gn)':dif>0?'var(--ac)':'var(--rd)';}
@@ -1101,9 +1107,12 @@ function cierreDiffsForMonth(ym){
     const c=S.cierres[d];
     const vs=S.ve[d]||[];const{ef}=calcEfTr(vs);
     const gaEf=(S.ga[d]||[]).reduce((s,g)=>s+gastoEf(g),0);
+    const movs=S.caja[d]||[];
+    const ingEf=movs.filter(m=>m.tipo==='ingreso'&&m.metodo==='efectivo').reduce((s,m)=>s+m.monto,0);
+    const egEf=movs.filter(m=>m.tipo==='egreso'&&m.metodo==='efectivo').reduce((s,m)=>s+m.monto,0);
     const prevDay=getPrevDay(d);
     const fondo=c.fondo_inicial_manual!=null?c.fondo_inicial_manual:(S.cierres?.[prevDay]?.saldo_siguiente||0);
-    const deberia=fondo+ef-gaEf-(c.retiro||0);
+    const deberia=fondo+ef+(ingEf-egEf)-gaEf-(c.retiro||0);
     const contadoNeto=Math.max(0,c.total_contado-(c.retiro||0));
     const dif=contadoNeto-deberia;
     totalDif+=dif;

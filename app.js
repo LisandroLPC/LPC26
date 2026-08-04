@@ -1100,6 +1100,23 @@ function rRepAnual(yr){
 }
 
 // Diferencias de caja (faltante/sobrante) acumuladas en el mes — para Reportes financieros
+// Evolución de caja día por día del mes — fondo, movimientos y saldo, todo junto
+function evolucionCajaMes(ym){
+  const dias=Object.keys(S.cierres||{}).filter(d=>d.startsWith(ym)).sort();
+  return dias.map(d=>{
+    const c=S.cierres[d];
+    const vs=S.ve[d]||[];const{ef}=calcEfTr(vs);
+    const gaEf=(S.ga[d]||[]).reduce((s,g)=>s+gastoEf(g),0);
+    const movs=S.caja[d]||[];
+    const ingEf=movs.filter(m=>m.tipo==='ingreso'&&m.metodo==='efectivo').reduce((s,m)=>s+m.monto,0);
+    const egEf=movs.filter(m=>m.tipo==='egreso'&&m.metodo==='efectivo').reduce((s,m)=>s+m.monto,0);
+    const prevDay=getPrevDay(d);
+    const fondo=c.fondo_inicial_manual!=null?c.fondo_inicial_manual:(S.cierres?.[prevDay]?.saldo_siguiente||0);
+    const deberia=fondo+ef+(ingEf-egEf)-gaEf-(c.retiro||0);
+    const contado=Math.max(0,c.total_contado-(c.retiro||0));
+    return{d,fondo,ef,movManual:ingEf-egEf,gaEf,retiro:c.retiro||0,deberia,contado,dif:contado-deberia,saldo:c.saldo_siguiente};
+  });
+}
 function cierreDiffsForMonth(ym){
   const dias=Object.keys(S.cierres||{}).filter(d=>d.startsWith(ym)).sort();
   let totalDif=0;const detalle=[];
@@ -1134,6 +1151,9 @@ function rRepFin(mthTabs){
   const catRows=Object.entries(catGas).sort((a,b)=>b[1]-a[1]).map(([c,v])=>`<tr><td>${c}</td><td style="font-family:var(--mo)">${$m(v)}</td><td style="font-family:var(--mo);color:var(--tx3)">${Math.round(tGastoTotal>0?(v/tGastoTotal)*100:0)}%</td></tr>`).join('')||`<tr><td colspan="3" class="empty-row">Sin gastos</td></tr>`;
   const{totalDif,detalle:difDetalle,diasCerrados}=cierreDiffsForMonth(rMonth);
   const difRows=difDetalle.map(x=>`<tr><td>${x.d.slice(8,10)}/${x.d.slice(5,7)}</td><td style="font-family:var(--mo);color:${x.dif>=0?'var(--gn)':'var(--rd)'}">${x.dif>=0?'+':''}${$m(x.dif)}</td></tr>`).join('')||`<tr><td colspan="2" class="empty-row">Sin diferencias relevantes</td></tr>`;
+  const evo=evolucionCajaMes(rMonth);
+  const evoTableRows=evo.map(r=>`<tr><td>${r.d.slice(8,10)}/${r.d.slice(5,7)}</td><td style="font-family:var(--mo)">${$m(r.fondo)}</td><td style="font-family:var(--mo);color:var(--gn)">${$m(r.ef)}</td><td style="font-family:var(--mo);color:${r.movManual>=0?'var(--gn)':'var(--rd)'}">${r.movManual>=0?'+':''}${$m(r.movManual)}</td><td style="font-family:var(--mo);color:var(--rd)">-${$m(r.gaEf)}</td><td style="font-family:var(--mo);color:var(--rd)">-${$m(r.retiro)}</td><td style="font-family:var(--mo);font-weight:600">${$m(r.deberia)}</td><td style="font-family:var(--mo)">${$m(r.contado)}</td><td style="font-family:var(--mo);color:${Math.abs(r.dif)<50?'var(--gn)':r.dif>0?'var(--ac)':'var(--rd)'}">${r.dif>=0?'+':''}${$m(r.dif)}</td><td style="font-family:var(--mo);font-weight:600;color:var(--bl)">${$m(r.saldo)}</td></tr>`).join('')||`<tr><td colspan="10" class="empty-row">Sin cierres confirmados este mes</td></tr>`;
+  const evoRows=`<div class="tbk"><div class="tt">Evolución de caja — día por día</div><div class="tbk-hint">→ deslizá para ver toda la fila</div><div class="tbk-scroll"><table><thead><tr><th>Día</th><th>Fondo inicial</th><th>Ventas ef.</th><th>Mov. manual</th><th>Gastos</th><th>Retiro</th><th>Debería haber</th><th>Contado</th><th>Diferencia</th><th>Saldo siguiente</th></tr></thead><tbody>${evoTableRows}</tbody></table></div></div>`;
   return`
   <div class="mtabs">${mthTabs}</div>
   <div class="kpis t3"><div class="kc hi"><div class="kl">Ingresos totales</div><div class="kv a">${$m(ingresoTotal)}</div><div class="kh">ventas + extra</div></div><div class="kc"><div class="kl">Gastos totales</div><div class="kv r">${$m(tGastoTotal)}</div><div class="kh" style="font-size:9px;color:var(--tx3)">op. ${$m(tg)} · comp. ${$m(tCompras)}</div></div><div class="kc"><div class="kl">Resultado</div><div class="kv ${resultado>=0?'g':'r'}">${$m(resultado)}</div></div></div>
@@ -1141,6 +1161,7 @@ function rRepFin(mthTabs){
   ${ingTotal>0||egTotal>0?`<div class="blk"><div class="bt">Movimientos de caja del período</div><div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--br)"><span style="font-size:11px;color:var(--tx2)">Ingresos extra</span><span style="font-family:var(--mo);color:var(--gn)">${$m(ingTotal)}</span></div><div style="display:flex;justify-content:space-between;padding:5px 0"><span style="font-size:11px;color:var(--tx2)">Egresos extra</span><span style="font-family:var(--mo);color:var(--rd)">${$m(egTotal)}</span></div></div>`:''}
   <div class="tbk"><div class="tt">Gastos operativos por categoría</div><table><thead><tr><th>Categoría</th><th>Monto</th><th>%</th></tr></thead><tbody>${catRows}</tbody></table></div>
   ${diasCerrados>0?`<div class="blk"><div class="bt">Diferencias de caja del mes (faltante/sobrante)</div><div style="display:flex;justify-content:space-between;padding:5px 0"><span style="font-size:11px;color:var(--tx2)">Acumulado (${diasCerrados} día${diasCerrados===1?'':'s'} cerrado${diasCerrados===1?'':'s'})</span><span style="font-family:var(--mo);font-weight:600;color:${totalDif>=0?'var(--gn)':'var(--rd)'}">${totalDif>=0?'+':''}${$m(totalDif)}</span></div></div><div class="tbk"><table><thead><tr><th>Día</th><th>Diferencia</th></tr></thead><tbody>${difRows}</tbody></table></div>`:''}
+  ${evoRows}
   <button class="btn btng" onclick="exportExcel()" style="width:100%;margin-top:6px">⬇ Exportar todo a Excel</button>`;
 }
 

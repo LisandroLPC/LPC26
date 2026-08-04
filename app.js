@@ -212,6 +212,7 @@ function rCaja(){
   const compraGastoIds=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));
   const gasOp=dG().filter(g=>!compraGastoIds.has(g.id));
   const gaEf=dG().reduce((s,g)=>s+gastoEf(g),0);
+  const gaTr=dG().reduce((s,g)=>s+gastoTr(g),0);
   const gasRows=gasOp.length?gasOp.map(g=>`<tr><td>${g.time||''}${g.usuario?`<div style="font-size:9px;color:var(--tx3)">${esc(g.usuario)}</div>`:''}</td><td style="max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(g.descripcion)}</td><td><span class="tag tg">${(g.cat||'').slice(0,5)}</span></td><td>${$m(g.amount)}</td><td><span class="tag ${g.metodo==='transferencia'?'tp':'tv'}">${g.metodo==='transferencia'?'Tr.':'Ef.'}</span></td><td><button class="dbtn" onclick="delGa('${g.id}')">✕</button></td></tr>`).join(''):`<tr><td colspan="6" class="empty-row">Sin gastos</td></tr>`;
 
   const mRows=movs.length?movs.map(m=>`<tr><td>${m.time||''}</td><td>${esc(m.descripcion)}</td><td><span class="tag ${m.tipo==='ingreso'?'tv':'tg'}">${m.tipo}</span></td><td style="color:${m.tipo==='ingreso'?'var(--gn)':'var(--rd)'}">${m.tipo==='ingreso'?'+':'-'}${$m(m.monto)}</td><td><span class="tag tp">${m.metodo.slice(0,3)}</span></td><td><button class="dbtn" onclick="delMov('${m.id}')">✕</button></td></tr>`).join(''):`<tr><td colspan="6" class="empty-row">Sin movimientos</td></tr>`;
@@ -220,7 +221,7 @@ function rCaja(){
   const cierrePrev=S.cierres?.[prevDay];
   const cierreHoy=S.cierres?.[day];
   const fondoInicial=cierreHoy?.fondo_inicial_manual??cierrePrev?.saldo_siguiente??0;
-  const fondoDigital=cierreHoy?.fondo_digital_manual??0;
+  const fondoDigital=cierreHoy?.fondo_digital_manual??cierrePrev?.saldo_digital_siguiente??0;
 
   return`
   <div class="kpis">
@@ -230,13 +231,20 @@ function rCaja(){
     <div class="kc" style="border-color:rgba(46,155,212,.3);background:rgba(46,155,212,.04)"><div class="kl">Transferencias</div><div class="kv" style="color:var(--bl)">${$m(cajaTr)}</div></div>
   </div>
   ${fondoInicial>0?`<div class="info-box green">💵 Fondo inicial del día: ${$m(fondoInicial)}</div>`:''}
-  <div class="info-box" style="border-color:rgba(46,155,212,.3);background:rgba(46,155,212,.04)">
-    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-      <span style="color:var(--bl)">📱 Fondo inicial digital (MP/reserva):</span>
-      <input type="number" id="fondo-digital-inp" value="${fondoDigital||''}" placeholder="0" style="max-width:110px">
-      <button class="btn" onclick="saveFondoDigital()" style="padding:5px 10px;font-size:11px">Guardar</button>
+  <div class="blk" style="border-color:rgba(46,155,212,.3)">
+    <div class="bt" style="color:var(--bl)">📱 Cierre digital — MP / Transferencia</div>
+    <div style="font-size:10px;color:var(--tx3);font-family:var(--mo);margin-bottom:8px">El fondo se arrastra solo día a día. Solo tocá el checkbox para corregirlo a mano.</div>
+    <label style="display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:6px"><input type="checkbox" id="cierre-editar-fondo-dig" onchange="toggleFondoDigEdit()" style="width:auto"> Corregir fondo inicial digital manualmente</label>
+    <div id="cierre-fondo-dig-manual-wrap" style="display:none;margin-bottom:8px"><input type="number" id="cierre-fondo-dig-manual" placeholder="Monto real" oninput="calcCierreDigital()"></div>
+    <div style="background:var(--sf2);border-radius:8px;padding:10px;margin-bottom:8px;border:1px solid var(--br)">
+      <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Fondo inicial digital</span><span style="font-family:var(--mo);color:var(--bl)" id="cierre-fondo-dig-cuenta">+${$m(fondoDigital)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Ventas digital</span><span style="font-family:var(--mo);color:var(--gn)">+${$m(tv-ef+ingTr-egTr)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Gastos/compras digital</span><span style="font-family:var(--mo);color:var(--rd)">-${$m(gaTr)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:5px 0 3px;border-top:1px solid var(--br);margin-top:4px;font-size:12px;font-weight:600"><span>Debería haber</span><span style="font-family:var(--mo);color:var(--bl)" id="cierre-deberia-dig">${$m(fondoDigital+(tv-ef)+ingTr-egTr-gaTr)}</span></div>
     </div>
-    <div style="font-size:9px;color:var(--tx3);font-family:var(--mo);margin-top:4px">No hace falta cerrar caja para esto — declaralo cuando quieras, se suma a "Transferencias" arriba.</div>
+    <div class="fl" style="margin-bottom:8px"><label>Saldo real en MP ahora (copiá el número de la app)</label><input type="number" id="cierre-real-dig" placeholder="0" value="${cierreHoy?.saldo_digital_real||''}" oninput="calcCierreDigital()"></div>
+    <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;font-weight:700"><span>Diferencia</span><span style="font-family:var(--mo)" id="cierre-diferencia-dig">—</span></div>
+    <button class="btn btnp" onclick="saveCierreDigital()" style="width:100%;margin-top:6px">✓ Confirmar cierre digital</button>
   </div>
 
   <!-- TICKET -->
@@ -523,15 +531,45 @@ function toggleFondoEdit(){
   if(disp)disp.style.display=cb?.checked?'none':'inline';
   calcCierre();
 }
-async function saveFondoDigital(){
-  const v=parseFloat(document.getElementById('fondo-digital-inp')?.value)||0;
+function toggleFondoDigEdit(){
+  const cb=document.getElementById('cierre-editar-fondo-dig'),wrap=document.getElementById('cierre-fondo-dig-manual-wrap');
+  if(wrap)wrap.style.display=cb?.checked?'block':'none';
+  calcCierreDigital();
+}
+function calcCierreDigital(){
+  const cierrePrevDig=S.cierres?.[getPrevDay(day)];
+  const cierreHoyDig=S.cierres?.[day];
+  const cb=document.getElementById('cierre-editar-fondo-dig');
+  const fondoManualInp=document.getElementById('cierre-fondo-dig-manual');
+  const fondo=cb?.checked&&fondoManualInp?(parseFloat(fondoManualInp.value)||0):(cierreHoyDig?.fondo_digital_manual??cierrePrevDig?.saldo_digital_siguiente??0);
+  const vs=dV(),tv=vs.reduce((s,v)=>s+v.total,0);const{ef}=calcEfTr(vs);
+  const movs=dCaja();
+  const ingTr=movs.filter(m=>m.tipo==='ingreso'&&m.metodo==='transferencia').reduce((s,m)=>s+m.monto,0);
+  const egTr=movs.filter(m=>m.tipo==='egreso'&&m.metodo==='transferencia').reduce((s,m)=>s+m.monto,0);
+  const gaTr=dG().reduce((s,g)=>s+gastoTr(g),0);
+  const deberia=fondo+(tv-ef)+ingTr-egTr-gaTr;
+  const fondoCuenta=document.getElementById('cierre-fondo-dig-cuenta');if(fondoCuenta)fondoCuenta.textContent='+'+$m(fondo);
+  const deberiaEl=document.getElementById('cierre-deberia-dig');if(deberiaEl)deberiaEl.textContent=$m(deberia);
+  const real=parseFloat(document.getElementById('cierre-real-dig')?.value);
+  const difEl=document.getElementById('cierre-diferencia-dig');
+  if(difEl){
+    if(isNaN(real)){difEl.textContent='—';difEl.style.color='var(--tx2)';}
+    else{const dif=real-deberia;difEl.textContent=(dif>=0?'+':'')+$m(dif);difEl.style.color=Math.abs(dif)<50?'var(--gn)':dif>0?'var(--ac)':'var(--rd)';}
+  }
+}
+async function saveCierreDigital(){
+  const real=parseFloat(document.getElementById('cierre-real-dig')?.value);
+  if(isNaN(real))return alert('Ingresá el saldo real que ves en Mercado Pago');
+  const cb=document.getElementById('cierre-editar-fondo-dig');
+  const fondoManualInp=document.getElementById('cierre-fondo-dig-manual');
+  const fondoManualVal=cb?.checked?parseFloat(fondoManualInp?.value)||0:undefined;
   if(!S.cierres)S.cierres={};
   const prev=S.cierres[day]||{total_contado:0,detalle:{},retiro:0,saldo_siguiente:0,fondo_inicial_manual:undefined,time:arTime()};
-  S.cierres[day]={...prev,fondo_digital_manual:v};
-  save();render();toast('Fondo digital guardado ✓');
+  S.cierres[day]={...prev,fondo_digital_manual:fondoManualVal,saldo_digital_real:real,saldo_digital_siguiente:real};
+  save();render();toast('Cierre digital guardado ✓ — Fondo siguiente: '+$m(real));
   if(online){
     const c=S.cierres[day];
-    const row={id:'cierre_'+day,day,total_contado:c.total_contado,retiro:c.retiro,saldo_siguiente:c.saldo_siguiente,fondo_inicial_manual:c.fondo_inicial_manual??null,fondo_digital_manual:v,detalle:JSON.stringify(c.detalle||{}),time:c.time};
+    const row={id:'cierre_'+day,day,total_contado:c.total_contado,retiro:c.retiro,saldo_siguiente:c.saldo_siguiente,fondo_inicial_manual:c.fondo_inicial_manual??null,fondo_digital_manual:fondoManualVal??null,saldo_digital_real:real,saldo_digital_siguiente:real,detalle:JSON.stringify(c.detalle||{}),time:c.time};
     sync('busy','guardando...');
     try{await sbUp('cierres',row);sync('ok','guardado')}catch(e){sync('err','error')}
   }
@@ -545,12 +583,14 @@ function saveCierre(){
   const cb=document.getElementById('cierre-editar-fondo');
   const fondoManualVal=cb?.checked?parseFloat(document.getElementById('cierre-fondo-manual')?.value)||0:undefined;
   const fondoDigitalPrev=S.cierres?.[day]?.fondo_digital_manual;
+  const saldoDigitalRealPrev=S.cierres?.[day]?.saldo_digital_real;
+  const saldoDigitalSigPrev=S.cierres?.[day]?.saldo_digital_siguiente;
   if(!S.cierres)S.cierres={};
-  S.cierres[day]={total_contado:total,detalle,retiro,saldo_siguiente:saldo,fondo_inicial_manual:fondoManualVal,fondo_digital_manual:fondoDigitalPrev,time:arTime()};
+  S.cierres[day]={total_contado:total,detalle,retiro,saldo_siguiente:saldo,fondo_inicial_manual:fondoManualVal,fondo_digital_manual:fondoDigitalPrev,saldo_digital_real:saldoDigitalRealPrev,saldo_digital_siguiente:saldoDigitalSigPrev,time:arTime()};
   save();render();toast('Cierre guardado ✓ — Fondo siguiente: '+$m(saldo));
   // Persistir cierre en Supabase
   if(online){
-    const row={id:'cierre_'+day,day,total_contado:total,retiro,saldo_siguiente:saldo,fondo_inicial_manual:fondoManualVal??null,fondo_digital_manual:fondoDigitalPrev??null,detalle:JSON.stringify(detalle),time:arTime()};
+    const row={id:'cierre_'+day,day,total_contado:total,retiro,saldo_siguiente:saldo,fondo_inicial_manual:fondoManualVal??null,fondo_digital_manual:fondoDigitalPrev??null,saldo_digital_real:saldoDigitalRealPrev??null,saldo_digital_siguiente:saldoDigitalSigPrev??null,detalle:JSON.stringify(detalle),time:arTime()};
     sbUp('cierres',row).catch(e=>console.error('Error guardando cierre:',e));
   }
 }

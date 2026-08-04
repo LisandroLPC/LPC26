@@ -371,7 +371,8 @@ function rCaja(){
     <div id="cierre-fondo-dig-manual-wrap" style="display:none;margin-bottom:8px"><input type="number" id="cierre-fondo-dig-manual" placeholder="Monto real" oninput="calcCierreDigital()"></div>
     <div style="background:var(--sf2);border-radius:8px;padding:10px;margin-bottom:8px;border:1px solid var(--br)">
       <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Fondo inicial digital</span><span style="font-family:var(--mo);color:var(--bl)" id="cierre-fondo-dig-cuenta">+${$m(fondoDigital)}</span></div>
-      <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Ventas digital</span><span style="font-family:var(--mo);color:var(--gn)">+${$m(tv-ef+ingTr-egTr)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Ventas digital</span><span style="font-family:var(--mo);color:var(--gn)">+${$m(tv-ef)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Ingresos/egresos manuales (dig.)</span><span style="font-family:var(--mo);color:${(ingTr-egTr)>=0?'var(--gn)':'var(--rd)'}">${(ingTr-egTr)>=0?'+':''}${$m(ingTr-egTr)}</span></div>
       <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Gastos/compras digital</span><span style="font-family:var(--mo);color:var(--rd)">-${$m(gaTr)}</span></div>
       <div style="display:flex;justify-content:space-between;padding:5px 0 3px;border-top:1px solid var(--br);margin-top:4px;font-size:12px;font-weight:600"><span>Debería haber</span><span style="font-family:var(--mo);color:var(--bl)" id="cierre-deberia-dig">${$m(fondoDigital+(tv-ef)+ingTr-egTr-gaTr)}</span></div>
     </div>

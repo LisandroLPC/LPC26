@@ -180,6 +180,11 @@ function rCaja(){
   const egTr=movs.filter(m=>m.tipo==='egreso'&&m.metodo==='transferencia').reduce((s,m)=>s+m.monto,0);
   const ga=dG().reduce((s,g)=>s+g.amount,0);
   const cajaEf=ef+ingEf-egEf;
+  const prevDay=getPrevDay(day);
+  const cierrePrev=S.cierres?.[prevDay];
+  const cierreHoy=S.cierres?.[day];
+  const fondoInicial=cierreHoy?.fondo_inicial_manual??cierrePrev?.saldo_siguiente??0;
+  const fondoDigital=cierreHoy?.fondo_digital_manual??cierrePrev?.saldo_digital_siguiente??0;
   const cajaTr=(tv-ef)+ingTr-egTr+fondoDigital;
   const resultado=tv+ingEf+ingTr-egEf-egTr-ga;
 
@@ -216,12 +221,6 @@ function rCaja(){
   const gasRows=gasOp.length?gasOp.map(g=>`<tr><td>${g.time||''}${g.usuario?`<div style="font-size:9px;color:var(--tx3)">${esc(g.usuario)}</div>`:''}</td><td style="max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(g.descripcion)}</td><td><span class="tag tg">${(g.cat||'').slice(0,5)}</span></td><td>${$m(g.amount)}</td><td><span class="tag ${g.metodo==='transferencia'?'tp':'tv'}">${g.metodo==='transferencia'?'Tr.':'Ef.'}</span></td><td><button class="dbtn" onclick="delGa('${g.id}')">✕</button></td></tr>`).join(''):`<tr><td colspan="6" class="empty-row">Sin gastos</td></tr>`;
 
   const mRows=movs.length?movs.map(m=>`<tr><td>${m.time||''}</td><td>${esc(m.descripcion)}</td><td><span class="tag ${m.tipo==='ingreso'?'tv':'tg'}">${m.tipo}</span></td><td style="color:${m.tipo==='ingreso'?'var(--gn)':'var(--rd)'}">${m.tipo==='ingreso'?'+':'-'}${$m(m.monto)}</td><td><span class="tag tp">${m.metodo.slice(0,3)}</span></td><td><button class="dbtn" onclick="delMov('${m.id}')">✕</button></td></tr>`).join(''):`<tr><td colspan="6" class="empty-row">Sin movimientos</td></tr>`;
-
-  const prevDay=getPrevDay(day);
-  const cierrePrev=S.cierres?.[prevDay];
-  const cierreHoy=S.cierres?.[day];
-  const fondoInicial=cierreHoy?.fondo_inicial_manual??cierrePrev?.saldo_siguiente??0;
-  const fondoDigital=cierreHoy?.fondo_digital_manual??cierrePrev?.saldo_digital_siguiente??0;
 
   return`
   <div class="kpis">

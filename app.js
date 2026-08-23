@@ -201,7 +201,25 @@ function rCaja(){
     const tb=b[1].created_at||b[1].time||'';
     return ta.localeCompare(tb);
   });
-  const vRows=ticketsSorted.length?ticketsSorted.map(([tid,tk],idx)=>{
+  // Convierte "11:28 a. m." / "1:15 p. m." a minutos desde medianoche, para separar turnos
+  function timeToMin(t){
+    if(!t)return -1;
+    const m=t.match(/(\d{1,2}):(\d{2})\s*([ap])/i);
+    if(!m)return -1;
+    let h=parseInt(m[1]),min=parseInt(m[2]);
+    const pm=m[3].toLowerCase()==='p';
+    if(pm&&h!==12)h+=12;
+    if(!pm&&h===12)h=0;
+    return h*60+min;
+  }
+  const CORTE_TURNO=13*60+30; // 13:30
+  const manana=ticketsSorted.filter(([,tk])=>timeToMin(tk.time)<CORTE_TURNO);
+  const tarde=ticketsSorted.filter(([,tk])=>timeToMin(tk.time)>=CORTE_TURNO);
+  function subtotalRow(label,list){
+    const tot=list.reduce((s,[,tk])=>s+tk.total,0);
+    return`<tr style="background:var(--sf2)"><td colspan="3" style="font-weight:600;font-size:11px;color:var(--tx2)">${label} (${list.length})</td><td colspan="3" style="font-weight:700;font-family:var(--mo)">${$m(tot)}</td></tr>`;
+  }
+  function ticketRow([tid,tk],idx){
     const itemList=tk.items.map(v=>{const vr=S.vr.find(x=>x.id===v.variant_id),gr=S.sg.find(x=>x.id===v.group_id);return`<div style="font-size:10px;color:var(--tx3);padding:1px 0">${esc(gr?gr.name:'–')}${vr?' › '+esc(vr.name):''} ×${v.qty} = ${$m(v.total)}</div>`;}).join('');
     const pagoTag=tk.pago==='mixto'?`<span class="tag tmx">mix</span>`:tk.pago==='Transferencia'?`<span class="tag tp">Tr.</span>`:`<span class="tag tv">Ef.</span>`;
     return`<tr>
@@ -212,12 +230,18 @@ function rCaja(){
       <td>${pagoTag}</td>
       <td>${sesion?.rol==='dueno'?`<button class="dbtn" onclick="delTicket('${tid}')">✕</button>`:''}</td>
     </tr>`;
-  }).join(''):`<tr><td colspan="6" class="empty-row">Sin ventas</td></tr>`;
+  }
+  const vRows=ticketsSorted.length?[
+    ...manana.map((t,i)=>ticketRow(t,i)),
+    manana.length?subtotalRow('Subtotal turno mañana',manana):'',
+    ...tarde.map((t,i)=>ticketRow(t,manana.length+i)),
+    tarde.length?subtotalRow('Subtotal turno tarde',tarde):''
+  ].join(''):`<tr><td colspan="6" class="empty-row">Sin ventas</td></tr>`;
 
   const compraGastoIds=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));
   const gasOp=dG().filter(g=>!compraGastoIds.has(g.id));
-  const gaEf=dG().reduce((s,g)=>s+gastoEf(g),0);
-  const gaTr=dG().reduce((s,g)=>s+gastoTr(g),0);
+  const gaEf=gasOp.reduce((s,g)=>s+gastoEf(g),0);
+  const gaTr=gasOp.reduce((s,g)=>s+gastoTr(g),0);
   const gasRows=gasOp.length?gasOp.map(g=>`<tr><td>${g.time||''}${g.usuario?`<div style="font-size:9px;color:var(--tx3)">${esc(g.usuario)}</div>`:''}</td><td style="max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(g.descripcion)}</td><td><span class="tag tg">${(g.cat||'').slice(0,5)}</span></td><td>${$m(g.amount)}</td><td><span class="tag ${g.metodo==='transferencia'?'tp':'tv'}">${g.metodo==='transferencia'?'Tr.':'Ef.'}</span></td><td><button class="dbtn" onclick="delGa('${g.id}')">✕</button></td></tr>`).join(''):`<tr><td colspan="6" class="empty-row">Sin gastos</td></tr>`;
 
   const mRows=movs.length?movs.map(m=>`<tr><td>${m.time||''}</td><td>${esc(m.descripcion)}</td><td><span class="tag ${m.tipo==='ingreso'?'tv':'tg'}">${m.tipo}</span></td><td style="color:${m.tipo==='ingreso'?'var(--gn)':'var(--rd)'}">${m.tipo==='ingreso'?'+':'-'}${$m(m.monto)}</td><td><span class="tag tp">${m.metodo.slice(0,3)}</span></td><td><button class="dbtn" onclick="delMov('${m.id}')">✕</button></td></tr>`).join(''):`<tr><td colspan="6" class="empty-row">Sin movimientos</td></tr>`;
@@ -506,7 +530,8 @@ function calcCierre(){
   if(retDisp)retDisp.textContent='-'+$m(retiro);
   if(deberiaEl){
     const vs=dV();const{ef}=calcEfTr(vs);
-    const gaEf=(S.ga[day]||[]).reduce((s,g)=>s+gastoEf(g),0);
+    const compraGastoIdsC=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));
+    const gaEf=(S.ga[day]||[]).filter(g=>!compraGastoIdsC.has(g.id)).reduce((s,g)=>s+gastoEf(g),0);
     const movs=dCaja();
     const ingEf=movs.filter(m=>m.tipo==='ingreso'&&m.metodo==='efectivo').reduce((s,m)=>s+m.monto,0);
     const egEf=movs.filter(m=>m.tipo==='egreso'&&m.metodo==='efectivo').reduce((s,m)=>s+m.monto,0);
@@ -549,7 +574,8 @@ function calcCierreDigital(){
   const movs=dCaja();
   const ingTr=movs.filter(m=>m.tipo==='ingreso'&&m.metodo==='transferencia').reduce((s,m)=>s+m.monto,0);
   const egTr=movs.filter(m=>m.tipo==='egreso'&&m.metodo==='transferencia').reduce((s,m)=>s+m.monto,0);
-  const gaTr=dG().reduce((s,g)=>s+gastoTr(g),0);
+  const compraGastoIdsD=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));
+  const gaTr=(S.ga[day]||[]).filter(g=>!compraGastoIdsD.has(g.id)).reduce((s,g)=>s+gastoTr(g),0);
   const deberia=fondo+(tv-ef)+ingTr-egTr-gaTr;
   const fondoCuenta=document.getElementById('cierre-fondo-dig-cuenta');if(fondoCuenta)fondoCuenta.textContent='+'+$m(fondo);
   const deberiaEl=document.getElementById('cierre-deberia-dig');if(deberiaEl)deberiaEl.textContent=$m(deberia);
@@ -1172,7 +1198,8 @@ function evolucionCajaMes(ym){
   return dias.map(d=>{
     const c=S.cierres[d];
     const vs=S.ve[d]||[];const{ef}=calcEfTr(vs);
-    const gaEf=(S.ga[d]||[]).reduce((s,g)=>s+gastoEf(g),0);
+    const compraGastoIdsM=new Set(S.co.map(c2=>c2.gasto_id).filter(Boolean));
+    const gaEf=(S.ga[d]||[]).filter(g=>!compraGastoIdsM.has(g.id)).reduce((s,g)=>s+gastoEf(g),0);
     const movs=S.caja[d]||[];
     const ingEf=movs.filter(m=>m.tipo==='ingreso'&&m.metodo==='efectivo').reduce((s,m)=>s+m.monto,0);
     const egEf=movs.filter(m=>m.tipo==='egreso'&&m.metodo==='efectivo').reduce((s,m)=>s+m.monto,0);
@@ -1189,7 +1216,8 @@ function cierreDiffsForMonth(ym){
   dias.forEach(d=>{
     const c=S.cierres[d];
     const vs=S.ve[d]||[];const{ef}=calcEfTr(vs);
-    const gaEf=(S.ga[d]||[]).reduce((s,g)=>s+gastoEf(g),0);
+    const compraGastoIdsM=new Set(S.co.map(c2=>c2.gasto_id).filter(Boolean));
+    const gaEf=(S.ga[d]||[]).filter(g=>!compraGastoIdsM.has(g.id)).reduce((s,g)=>s+gastoEf(g),0);
     const movs=S.caja[d]||[];
     const ingEf=movs.filter(m=>m.tipo==='ingreso'&&m.metodo==='efectivo').reduce((s,m)=>s+m.monto,0);
     const egEf=movs.filter(m=>m.tipo==='egreso'&&m.metodo==='efectivo').reduce((s,m)=>s+m.monto,0);

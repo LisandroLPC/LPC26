@@ -174,11 +174,13 @@ function rCaja(){
     else if(v.pago==='mixto'&&!ticketsSeen.has(tk)){ef+=(v.pago_ef||0);ticketsSeen.add(tk);}
   });
   const movs=dCaja();
+  const compraGastoIds=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));
+  const gasOp=dG().filter(g=>!compraGastoIds.has(g.id));
   const ingEf=movs.filter(m=>m.tipo==='ingreso'&&m.metodo==='efectivo').reduce((s,m)=>s+m.monto,0);
   const egEf=movs.filter(m=>m.tipo==='egreso'&&m.metodo==='efectivo').reduce((s,m)=>s+m.monto,0);
   const ingTr=movs.filter(m=>m.tipo==='ingreso'&&m.metodo==='transferencia').reduce((s,m)=>s+m.monto,0);
   const egTr=movs.filter(m=>m.tipo==='egreso'&&m.metodo==='transferencia').reduce((s,m)=>s+m.monto,0);
-  const ga=dG().reduce((s,g)=>s+g.amount,0);
+  const ga=gasOp.reduce((s,g)=>s+g.amount,0);
   const cajaEf=ef+ingEf-egEf;
   const prevDay=getPrevDay(day);
   const cierrePrev=S.cierres?.[prevDay];
@@ -238,8 +240,6 @@ function rCaja(){
     tarde.length?subtotalRow('Subtotal turno tarde',tarde):''
   ].join(''):`<tr><td colspan="6" class="empty-row">Sin ventas</td></tr>`;
 
-  const compraGastoIds=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));
-  const gasOp=dG().filter(g=>!compraGastoIds.has(g.id));
   const gaEf=gasOp.reduce((s,g)=>s+gastoEf(g),0);
   const gaTr=gasOp.reduce((s,g)=>s+gastoTr(g),0);
   const gasRows=gasOp.length?gasOp.map(g=>`<tr><td>${g.time||''}${g.usuario?`<div style="font-size:9px;color:var(--tx3)">${esc(g.usuario)}</div>`:''}</td><td style="max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(g.descripcion)}</td><td><span class="tag tg">${(g.cat||'').slice(0,5)}</span></td><td>${$m(g.amount)}</td><td><span class="tag ${g.metodo==='transferencia'?'tp':'tv'}">${g.metodo==='transferencia'?'Tr.':'Ef.'}</span></td><td><button class="dbtn" onclick="delGa('${g.id}')">✕</button></td></tr>`).join(''):`<tr><td colspan="6" class="empty-row">Sin gastos</td></tr>`;

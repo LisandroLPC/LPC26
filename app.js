@@ -178,6 +178,7 @@ function render(){
 /* ══ CAJA ══════════════════════════════════════════════════════ */
 function rCaja(){
   const vs=dV(),tv=vs.reduce((s,v)=>s+v.total,0);
+  const tvCaja=vs.filter(v=>v.pago!=='cuenta_corriente').reduce((s,v)=>s+v.total,0); // ventas que sí mueven caja hoy (excluye Cta.Cte hasta que se cobre)
   // Calcular ef/tr por ticket único para evitar duplicar pago_ef/pago_tr en tickets con múltiples ítems
   const ticketsSeen=new Set();
   let ef=0;
@@ -201,7 +202,7 @@ function rCaja(){
   const fondoInicial=cierreHoy?.fondo_inicial_manual??cierrePrev?.saldo_siguiente??0;
   const fondoDigital=cierreHoy?.fondo_digital_manual??cierrePrev?.saldo_digital_siguiente??0;
   const cajaTr=(tv-ef)+ingTr-egTr+fondoDigital;
-  const resultado=tv+ingEf+ingTr-egEf-egTr-ga;
+  const resultado=tvCaja+ingEf+ingTr-egEf-egTr-ga;
 
   // ticket en proceso
   const tktTotal=ticketItems.reduce((s,x)=>s+x.total,0);
@@ -261,7 +262,7 @@ function rCaja(){
 
   return`
   <div class="kpis">
-    <div class="kc hi"><div class="kl">Ventas</div><div class="kv a">${$m(tv)}</div><div class="kh">${vs.length} ítems · ${Object.keys(byTicket).length} tickets</div></div>
+    <div class="kc hi"><div class="kl">Ventas</div><div class="kv a">${$m(tvCaja)}</div><div class="kh">${vs.filter(v=>v.pago!=='cuenta_corriente').length} ítems · ${new Set(vs.filter(v=>v.pago!=='cuenta_corriente').map(v=>v.ticket_id||v.id)).size} tickets${vs.length!==vs.filter(v=>v.pago!=='cuenta_corriente').length?' · +Cta.Cte':''}</div></div>
     <div class="kc"><div class="kl">Resultado</div><div class="kv ${resultado>=0?'g':'r'}">${$m(resultado)}</div></div>
     <div class="kc" style="border-color:rgba(26,158,58,.3);background:rgba(26,158,58,.04)"><div class="kl">Efectivo caja</div><div class="kv" style="color:var(--gn)">${$m(cajaEf)}</div></div>
     <div class="kc" style="border-color:rgba(46,155,212,.3);background:rgba(46,155,212,.04)"><div class="kl">Transferencias</div><div class="kv" style="color:var(--bl)">${$m(cajaTr)}</div></div>
@@ -1263,12 +1264,14 @@ function periodData(matchDay){
   const ingTr=movs.filter(m=>m.tipo==='ingreso'&&m.metodo==='transferencia').reduce((s,m)=>s+m.monto,0);
   const egEf=movs.filter(m=>m.tipo==='egreso'&&m.metodo==='efectivo').reduce((s,m)=>s+m.monto,0);
   const egTr=movs.filter(m=>m.tipo==='egreso'&&m.metodo==='transferencia').reduce((s,m)=>s+m.monto,0);
-  const ingTotal=ingEf+ingTr,egTotal=egEf+egTr,resultado=tv+ingTotal-egTotal-tg-tCompras;
-  return{vs,tv,tvEf,tvTr,tg,tCompras,byG,ingEf,ingTr,egEf,egTr,ingTotal,egTotal,resultado,costoVentasTotal,margenBruto};
+  // Los pagos de cuenta corriente ya cobrados: NO se suman de nuevo al resultado, esa venta ya sumó a "tv" el día que se hizo a Cta.Cte.
+  const pagosCC=movs.filter(m=>m.tipo==='ingreso'&&m.cliente_cc_id).reduce((s,m)=>s+m.monto,0);
+  const ingTotal=ingEf+ingTr,egTotal=egEf+egTr,resultado=tv+ingTotal-pagosCC-egTotal-tg-tCompras;
+  return{vs,tv,tvEf,tvTr,tg,tCompras,byG,ingEf,ingTr,egEf,egTr,ingTotal,egTotal,pagosCC,resultado,costoVentasTotal,margenBruto};
 }
 function mData(ym){return periodData(d=>d.startsWith(ym));}
 function dayData(d0){return periodData(d=>d===d0);}
-function yrData(yr){const ms=[];for(let m=1;m<=12;m++){const ym=yr+'-'+m.toString().padStart(2,'0');const{tv,tg,tCompras,ingTotal,egTotal}=mData(ym);ms.push({lbl:fM(ym).split(' ')[0],tv,tg:tg+tCompras,res:tv+ingTotal-egTotal-tg-tCompras})}return ms}
+function yrData(yr){const ms=[];for(let m=1;m<=12;m++){const ym=yr+'-'+m.toString().padStart(2,'0');const{tv,tg,tCompras,resultado}=mData(ym);ms.push({lbl:fM(ym).split(' ')[0],tv,tg:tg+tCompras,res:resultado})}return ms}
 
 function rReportes(){
   const mths=getMths();if(!mths.includes(rMonth)&&mths.length)rMonth=mths[0];
@@ -1404,9 +1407,9 @@ function cierreDiffsForMonth(ym){
   return{totalDif,detalle,diasCerrados:dias.length};
 }
 function rRepFin(mthTabs){
-  const{tv,tvEf,tvTr,tg,tCompras,byG,ingEf,ingTr,egEf,egTr,ingTotal,egTotal,resultado}=mData(rMonth);
+  const{tv,tvEf,tvTr,tg,tCompras,byG,ingEf,ingTr,egEf,egTr,ingTotal,egTotal,pagosCC,resultado}=mData(rMonth);
   const tGastoTotal=tg+tCompras;
-  const ingresoTotal=tv+ingTotal;const margen=ingresoTotal>0?Math.round((resultado/ingresoTotal)*100):0;
+  const ingresoTotal=tv+ingTotal-pagosCC;const margen=ingresoTotal>0?Math.round((resultado/ingresoTotal)*100):0;
   const margenCol=margen>30?'var(--gn)':margen>10?'var(--ac)':'var(--rd)';
   const _compraIdsFin=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));
   const catGas={};

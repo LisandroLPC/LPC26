@@ -201,7 +201,7 @@ function rCaja(){
   const cierreHoy=S.cierres?.[day];
   const fondoInicial=cierreHoy?.fondo_inicial_manual??cierrePrev?.saldo_siguiente??0;
   const fondoDigital=cierreHoy?.fondo_digital_manual??cierrePrev?.saldo_digital_siguiente??0;
-  const cajaTr=(tv-ef)+ingTr-egTr+fondoDigital;
+  const cajaTr=(tvCaja-ef)+ingTr-egTr+fondoDigital;
   const resultado=tvCaja+ingEf+ingTr-egEf-egTr-ga;
 
   // ticket en proceso
@@ -418,10 +418,10 @@ function rCaja(){
     <div id="cierre-fondo-dig-manual-wrap" style="display:none;margin-bottom:8px"><input type="number" id="cierre-fondo-dig-manual" placeholder="Monto real" oninput="calcCierreDigital()"></div>
     <div style="background:var(--sf2);border-radius:8px;padding:10px;margin-bottom:8px;border:1px solid var(--br)">
       <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Fondo inicial digital</span><span style="font-family:var(--mo);color:var(--bl)" id="cierre-fondo-dig-cuenta">+${$m(fondoDigital)}</span></div>
-      <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Ventas digital</span><span style="font-family:var(--mo);color:var(--gn)">+${$m(tv-ef)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Ventas digital</span><span style="font-family:var(--mo);color:var(--gn)">+${$m(tvCaja-ef)}</span></div>
       <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Ingresos/egresos manuales (dig.)</span><span style="font-family:var(--mo);color:${(ingTr-egTr)>=0?'var(--gn)':'var(--rd)'}">${(ingTr-egTr)>=0?'+':''}${$m(ingTr-egTr)}</span></div>
       <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:var(--tx2)">Gastos/compras digital</span><span style="font-family:var(--mo);color:var(--rd)">-${$m(gaTr)}</span></div>
-      <div style="display:flex;justify-content:space-between;padding:5px 0 3px;border-top:1px solid var(--br);margin-top:4px;font-size:12px;font-weight:600"><span>Debería haber</span><span style="font-family:var(--mo);color:var(--bl)" id="cierre-deberia-dig">${$m(fondoDigital+(tv-ef)+ingTr-egTr-gaTr)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:5px 0 3px;border-top:1px solid var(--br);margin-top:4px;font-size:12px;font-weight:600"><span>Debería haber</span><span style="font-family:var(--mo);color:var(--bl)" id="cierre-deberia-dig">${$m(fondoDigital+(tvCaja-ef)+ingTr-egTr-gaTr)}</span></div>
     </div>
     <div class="fl" style="margin-bottom:8px"><label>Saldo real en MP ahora (copiá el número de la app)</label><input type="number" id="cierre-real-dig" placeholder="0" value="${cierreHoy?.saldo_digital_real||''}" oninput="calcCierreDigital()"></div>
     <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;font-weight:700"><span>Diferencia</span><span style="font-family:var(--mo)" id="cierre-diferencia-dig">—</span></div>
@@ -601,7 +601,7 @@ function calcCierreDigital(){
   const cb=document.getElementById('cierre-editar-fondo-dig');
   const fondoManualInp=document.getElementById('cierre-fondo-dig-manual');
   const fondo=cb?.checked&&fondoManualInp?(parseFloat(fondoManualInp.value)||0):(cierreHoyDig?.fondo_digital_manual??cierrePrevDig?.saldo_digital_siguiente??0);
-  const vs=dV(),tv=vs.reduce((s,v)=>s+v.total,0);const{ef}=calcEfTr(vs);
+  const vs=dV().filter(v=>v.pago!=='cuenta_corriente'),tv=vs.reduce((s,v)=>s+v.total,0);const{ef}=calcEfTr(vs);
   const movs=dCaja();
   const ingTr=movs.filter(m=>m.tipo==='ingreso'&&m.metodo==='transferencia').reduce((s,m)=>s+m.monto,0);
   const egTr=movs.filter(m=>m.tipo==='egreso'&&m.metodo==='transferencia').reduce((s,m)=>s+m.monto,0);
@@ -1251,9 +1251,11 @@ function calcByG(vs){
 // Motor único para día/mes — evita tener la misma lógica escrita dos veces
 function periodData(matchDay){
   const vs=Object.entries(S.ve).filter(([d])=>matchDay(d)).flatMap(([,v])=>v);
-  const tv=vs.reduce((s,v)=>s+v.total,0);
-  const{ef:tvEf,tr:tvTr}=calcEfTr(vs);
-  const byG=calcByG(vs);
+  // Ventas a Cuenta Corriente NO cuentan como "venta" todavía en ningún lado — recién suman cuando se cobran (más abajo, como ingreso)
+  const vsCash=vs.filter(v=>v.pago!=='cuenta_corriente');
+  const tv=vsCash.reduce((s,v)=>s+v.total,0);
+  const{ef:tvEf,tr:tvTr}=calcEfTr(vsCash);
+  const byG=calcByG(vsCash);
   const costoVentasTotal=Object.values(byG).reduce((s,g)=>s+g.costo,0);
   const margenBruto=tv-costoVentasTotal;
   const _compraIds=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));
@@ -1264,10 +1266,8 @@ function periodData(matchDay){
   const ingTr=movs.filter(m=>m.tipo==='ingreso'&&m.metodo==='transferencia').reduce((s,m)=>s+m.monto,0);
   const egEf=movs.filter(m=>m.tipo==='egreso'&&m.metodo==='efectivo').reduce((s,m)=>s+m.monto,0);
   const egTr=movs.filter(m=>m.tipo==='egreso'&&m.metodo==='transferencia').reduce((s,m)=>s+m.monto,0);
-  // Los pagos de cuenta corriente ya cobrados: NO se suman de nuevo al resultado, esa venta ya sumó a "tv" el día que se hizo a Cta.Cte.
-  const pagosCC=movs.filter(m=>m.tipo==='ingreso'&&m.cliente_cc_id).reduce((s,m)=>s+m.monto,0);
-  const ingTotal=ingEf+ingTr,egTotal=egEf+egTr,resultado=tv+ingTotal-pagosCC-egTotal-tg-tCompras;
-  return{vs,tv,tvEf,tvTr,tg,tCompras,byG,ingEf,ingTr,egEf,egTr,ingTotal,egTotal,pagosCC,resultado,costoVentasTotal,margenBruto};
+  const ingTotal=ingEf+ingTr,egTotal=egEf+egTr,resultado=tv+ingTotal-egTotal-tg-tCompras;
+  return{vs,tv,tvEf,tvTr,tg,tCompras,byG,ingEf,ingTr,egEf,egTr,ingTotal,egTotal,resultado,costoVentasTotal,margenBruto};
 }
 function mData(ym){return periodData(d=>d.startsWith(ym));}
 function dayData(d0){return periodData(d=>d===d0);}
@@ -1298,7 +1298,7 @@ function rRepDia(){
   const bgRows=Object.entries(byG).sort((a,b)=>b[1].tot-a[1].tot).map(([n,d])=>{const marg=d.tot-d.costo,margPct=d.tot>0?Math.round((marg/d.tot)*100):0;return`<tr><td>${esc(n)}</td><td style="font-family:var(--mo)">${fQ(d.qty,d.unit)}</td><td style="font-family:var(--mo)">${$m(d.tot)}</td><td style="font-family:var(--mo);color:var(--gn)">${$m(d.ef)}</td><td style="font-family:var(--mo);color:var(--bl)">${$m(d.tr)}</td><td style="font-family:var(--mo);color:var(--tx2)">${$m(d.costo)}</td><td style="font-family:var(--mo);color:${marg>=0?'var(--gn)':'var(--rd)'}">${$m(marg)} (${margPct}%)</td></tr>`;}).join('')||`<tr><td colspan="7" class="empty-row">Sin ventas</td></tr>`;
   // tickets del dia agrupados
   const byTicket={};vs.forEach(v=>{const tk=v.ticket_id||v.id;if(!byTicket[tk])byTicket[tk]={items:[],total:0,pago:v.pago,time:v.time||''};byTicket[tk].items.push(v);byTicket[tk].total+=v.total;});
-  const tktRows=Object.entries(byTicket).sort((a,b)=>a[1].time.localeCompare(b[1].time)).map(([tid,tk])=>`<tr><td>${tk.time}</td><td>${tk.items.length} ítem(s)</td><td style="font-family:var(--mo)">${$m(tk.total)}</td><td><span class="tag tv">${(tk.pago||'').slice(0,3)}</span></td></tr>`).join('')||`<tr><td colspan="4" class="empty-row">Sin tickets</td></tr>`;
+  const tktRows=Object.entries(byTicket).sort((a,b)=>a[1].time.localeCompare(b[1].time)).map(([tid,tk])=>`<tr><td>${tk.time}</td><td>${tk.items.length} ítem(s)</td><td style="font-family:var(--mo)">${$m(tk.total)}</td><td><span class="tag tv">${tk.pago==='cuenta_corriente'?'CC':(tk.pago||'').slice(0,3)}</span></td></tr>`).join('')||`<tr><td colspan="4" class="empty-row">Sin tickets</td></tr>`;
   const _compraIds=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));
   const gsRows=(S.ga[day]||[]).filter(g=>!_compraIds.has(g.id)).map(g=>`<tr><td>${g.time||''}</td><td>${esc(g.descripcion)}</td><td><span class="tag tg">${(g.cat||'').slice(0,5)}</span></td><td>${$m(g.amount)}</td></tr>`).join('')||`<tr><td colspan="4" class="empty-row">Sin gastos operativos</td></tr>`;
   const compHoy=S.co.filter(c=>c.day===day).map(c=>`<tr><td>${c.time||''}</td><td>${esc(c.proveedor)}</td><td><span class="tag to">compra</span></td><td>${$m(c.total)}</td></tr>`).join('');
@@ -1407,9 +1407,9 @@ function cierreDiffsForMonth(ym){
   return{totalDif,detalle,diasCerrados:dias.length};
 }
 function rRepFin(mthTabs){
-  const{tv,tvEf,tvTr,tg,tCompras,byG,ingEf,ingTr,egEf,egTr,ingTotal,egTotal,pagosCC,resultado}=mData(rMonth);
+  const{tv,tvEf,tvTr,tg,tCompras,byG,ingEf,ingTr,egEf,egTr,ingTotal,egTotal,resultado}=mData(rMonth);
   const tGastoTotal=tg+tCompras;
-  const ingresoTotal=tv+ingTotal-pagosCC;const margen=ingresoTotal>0?Math.round((resultado/ingresoTotal)*100):0;
+  const ingresoTotal=tv+ingTotal;const margen=ingresoTotal>0?Math.round((resultado/ingresoTotal)*100):0;
   const margenCol=margen>30?'var(--gn)':margen>10?'var(--ac)':'var(--rd)';
   const _compraIdsFin=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));
   const catGas={};

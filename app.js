@@ -109,6 +109,12 @@ function buildNav(){
 function go(t){tab=t;document.querySelectorAll('.bni').forEach(el=>el.classList.toggle('active',el.id==='bn-'+t));render();}
 function chDay(d){const dt=new Date(day+'T12:00:00');dt.setDate(dt.getDate()+d);const nd=dt.toISOString().split('T')[0];if(nd>arDay())return;day=nd;render();}
 function goToDate(v){if(!v)return;if(v>arDay())v=arDay();day=v;render();}
+function abrirCalendario(){
+  const dp=document.getElementById('day-picker');
+  if(!dp)return;
+  if(dp.showPicker){try{dp.showPicker();}catch(e){dp.focus();dp.click();}}
+  else{dp.focus();dp.click();}
+}
 
 function initApp(){day=arDay();buildNav();sync('busy','cargando...');loadAll().then(()=>{if(!online)sync('err','offline')});render();}
 

@@ -39,7 +39,7 @@ let tab='caja',day=arDay(),online=navigator.onLine;
 let sesion=SC.g('sesion')||null;
 let ticketItems=[],corteItems=[],elabItems=[],compraItems=[];
 let pagoSeleccionado='Efectivo';
-let ccClienteId=null,ccTicketAbierto=null;
+let ccClienteId=null,ccTicketAbierto=null,ccSeleccionados=new Set();
 let charts={},rMonth=arMonth(),rTab='dia',prodTab='corte';
 let loginRol='dueno',pinBuf='';
 
@@ -983,8 +983,9 @@ function ticketsPendientesCC(id){
     arr.forEach(v=>{
       if(v.cliente_cc_id!==id)return;
       const tk=v.ticket_id||v.id;
-      if(!tickets[tk])tickets[tk]={day:d,time:v.time,created_at:v.created_at,total:0,ticketId:tk,pagado:true};
+      if(!tickets[tk])tickets[tk]={day:d,time:v.time,created_at:v.created_at,total:0,ticketId:tk,pagado:true,items:[]};
       tickets[tk].total+=v.total;
+      tickets[tk].items.push(v);
       if(!v.cc_pagado)tickets[tk].pagado=false;
     });
   });
@@ -1024,8 +1025,8 @@ async function delClienteCC(id){
   S.ccl=S.ccl.filter(c=>c.id!==id);ccClienteId=null;save();render();
   if(online){try{await sbDel('clientes_cc',id)}catch(e){}}
 }
-function verClienteCC(id){ccClienteId=id;ccTicketAbierto=null;render();}
-function volverCCList(){ccClienteId=null;render();}
+function verClienteCC(id){ccClienteId=id;ccTicketAbierto=null;ccSeleccionados=new Set();render();}
+function volverCCList(){ccClienteId=null;ccSeleccionados=new Set();render();}
 function toggleCCTicket(tid){ccTicketAbierto=ccTicketAbierto===tid?null:tid;render();}
 function rCCDetail(id){
   const c=S.ccl.find(x=>x.id===id);
@@ -1052,10 +1053,16 @@ function rCCDetail(id){
       ${abierto?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--br)">${m.items.map(v=>{const vr=S.vr.find(x=>x.id===v.variant_id),gr=S.sg.find(x=>x.id===v.group_id);return`<div style="font-size:10px;color:var(--tx2);padding:2px 0">${esc(gr?gr.name:'–')}${vr?' › '+esc(vr.name):''} ×${v.qty} = ${$m(v.total)}</div>`;}).join('')}</div>`:`<div style="font-size:9px;color:var(--tx3);font-family:var(--mo);margin-top:4px">Tocá para ver el detalle</div>`}
     </div>`;
   }).join(''):`<div class="empty-row">Sin movimientos este mes</div>`;
-  const pendRows=pendientes.length?pendientes.map(t=>`<label style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--sf2);border-radius:7px;margin-bottom:5px;cursor:pointer">
-    <span style="display:flex;align-items:center;gap:8px"><input type="checkbox" class="cc-tk-check" data-monto="${t.total}" onchange="calcSeleccionCC()" style="width:auto"><span style="font-size:11px;font-family:var(--mo)">${fDL(t.day)} · ${t.time||''}</span></span>
-    <span style="font-size:12px;font-weight:600;font-family:var(--mo)">${$m(t.total)}</span>
-  </label>`).join(''):`<div style="font-size:11px;color:var(--tx3);font-family:var(--mo);padding:6px 0">No hay facturas pendientes de este cliente</div>`;
+  const pendRows=pendientes.length?pendientes.map(t=>{
+    const abierto=ccTicketAbierto===t.ticketId;
+    return`<div style="background:var(--sf2);border-radius:7px;margin-bottom:5px;padding:8px 10px">
+    <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleCCTicket('${t.ticketId}')">
+      <span style="display:flex;align-items:center;gap:8px"><input type="checkbox" class="cc-tk-check" data-tk="${t.ticketId}" data-monto="${t.total}" ${ccSeleccionados.has(t.ticketId)?'checked':''} onclick="event.stopPropagation()" onchange="toggleCCSeleccion('${t.ticketId}',this.checked)" style="width:auto"><span style="font-size:11px;font-family:var(--mo)">${fDL(t.day)} · ${t.time||''}</span></span>
+      <span style="font-size:12px;font-weight:600;font-family:var(--mo)">${$m(t.total)}</span>
+    </div>
+    ${abierto?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--br)">${t.items.map(v=>{const vr=S.vr.find(x=>x.id===v.variant_id),gr=S.sg.find(x=>x.id===v.group_id);return`<div style="font-size:10px;color:var(--tx2);padding:2px 0">${esc(gr?gr.name:'–')}${vr?' › '+esc(vr.name):''} ×${v.qty} = ${$m(v.total)}</div>`;}).join('')}</div>`:`<div style="font-size:9px;color:var(--tx3);font-family:var(--mo);margin-top:3px">Tocá para ver qué mercadería incluye</div>`}
+  </div>`;
+  }).join(''):`<div style="font-size:11px;color:var(--tx3);font-family:var(--mo);padding:6px 0">No hay facturas pendientes de este cliente</div>`;
   return`<button class="btn" onclick="volverCCList()" style="margin-bottom:10px;padding:6px 12px;font-size:11px">← Volver a clientes</button>
   <div class="blk">
     <div style="display:flex;justify-content:space-between;align-items:flex-start">
@@ -1071,7 +1078,7 @@ function rCCDetail(id){
   <div class="blk"><div class="bt">Registrar pago recibido</div>
     <div style="font-size:10px;color:var(--tx3);font-family:var(--mo);margin-bottom:8px">Tildá qué facturas está pagando el cliente</div>
     ${pendRows}
-    <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12px;font-weight:700;border-top:1px solid var(--br);margin-top:4px"><span>Total seleccionado</span><span id="cc-total-sel" style="font-family:var(--mo)">$0</span></div>
+    <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12px;font-weight:700;border-top:1px solid var(--br);margin-top:4px"><span>Total seleccionado</span><span id="cc-total-sel" style="font-family:var(--mo)">${$m(pendientes.filter(t=>ccSeleccionados.has(t.ticketId)).reduce((s,t)=>s+t.total,0))}</span></div>
     <div class="fr" style="margin-top:8px">
       <div class="fl"><label>Método</label><select id="cc-pago-metodo" onchange="toggleCCPagoMixto()"><option value="efectivo">Efectivo</option><option value="transferencia">Transferencia</option><option value="mixto">Mixto</option></select></div>
     </div>
@@ -1085,9 +1092,13 @@ function rCCDetail(id){
   </div>
   <div class="sh">Movimientos de ${fM(ym)}</div>${movRows}`;
 }
+function toggleCCSeleccion(tid,checked){
+  if(checked)ccSeleccionados.add(tid);else ccSeleccionados.delete(tid);
+  calcSeleccionCC();
+}
 function calcSeleccionCC(){
-  const checks=document.querySelectorAll('.cc-tk-check:checked');
-  let tot=0;checks.forEach(c=>tot+=parseFloat(c.dataset.monto)||0);
+  let tot=0;
+  document.querySelectorAll('.cc-tk-check').forEach(c=>{if(c.checked)tot+=parseFloat(c.dataset.monto)||0;});
   const el=document.getElementById('cc-total-sel');if(el)el.textContent=$m(tot);
 }
 function toggleCCPagoMixto(){
@@ -1096,9 +1107,8 @@ function toggleCCPagoMixto(){
 }
 async function registrarPagoCC(clienteId){
   const c=S.ccl.find(x=>x.id===clienteId);if(!c)return;
-  const allChecks=[...document.querySelectorAll('.cc-tk-check')];
   const pendientes=ticketsPendientesCC(clienteId);
-  const seleccionados=pendientes.filter((t,i)=>allChecks[i]?.checked);
+  const seleccionados=pendientes.filter(t=>ccSeleccionados.has(t.ticketId));
   if(!seleccionados.length)return alert('Tildá al menos una factura pendiente para registrar el pago');
   const totalSel=seleccionados.reduce((s,t)=>s+t.total,0);
   const metodo=document.getElementById('cc-pago-metodo')?.value;
@@ -1121,6 +1131,7 @@ async function registrarPagoCC(clienteId){
   Object.values(S.ve).forEach(arr=>arr.forEach(v=>{
     if(v.cliente_cc_id===clienteId&&ticketIds.has(v.ticket_id||v.id)){v.cc_pagado=true;ventasActualizadas.push(v);}
   }));
+  ccSeleccionados=new Set();
   save();render();toast(`Pago de ${c.nombre} registrado ✓`);
   if(online){
     sync('busy','guardando...');

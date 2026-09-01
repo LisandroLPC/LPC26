@@ -508,7 +508,7 @@ async function cerrarTicket(){
     if(pct>0){comision=Math.round(tr*pct/100*100)/100;}
   }
   const tktId=uid(),time=arTime();
-  const rows=ticketItems.map(x=>{const g=S.sg.find(sg=>sg.id===x.groupId);return{id:uid(),day,ticket_id:tktId,variant_id:x.varId,group_id:x.groupId,qty:x.qty,stock_used:x.stockUsed,price_unit:x.price,descuento_pct:x.desc,total:x.total,costo_unit_venta:g?.cost_unit||0,pago,pago_ef:ef,pago_tr:tr,cliente_cc_id:clienteCcId,usuario:sesion?.nombre||'—',time};});
+  const rows=ticketItems.map(x=>{const g=S.sg.find(sg=>sg.id===x.groupId);return{id:uid(),day,ticket_id:tktId,variant_id:x.varId,group_id:x.groupId,qty:x.qty,stock_used:x.stockUsed,price_unit:x.price,descuento_pct:x.desc,total:x.total,costo_unit_venta:g?.cost_unit||0,pago,pago_ef:ef,pago_tr:tr,cliente_cc_id:clienteCcId,cc_pagado:clienteCcId?false:null,usuario:sesion?.nombre||'—',time};});
   if(!S.ve[day])S.ve[day]=[];S.ve[day].push(...rows);
   // descontar stock
   ticketItems.forEach(x=>{const g=S.sg.find(sg=>sg.id===x.groupId);if(g)g.stock_qty=(g.stock_qty||0)-x.stockUsed;});
@@ -960,8 +960,9 @@ function movimientosClienteCC(id,ym){
     arr.forEach(v=>{
       if(v.cliente_cc_id!==id)return;
       const tk=v.ticket_id||v.id;
-      if(!tickets[tk])tickets[tk]={tipo:'venta',day:d,time:v.time,created_at:v.created_at,items:[],total:0,ticketId:tk};
+      if(!tickets[tk])tickets[tk]={tipo:'venta',day:d,time:v.time,created_at:v.created_at,items:[],total:0,ticketId:tk,pagado:true};
       tickets[tk].items.push(v);tickets[tk].total+=v.total;
+      if(!v.cc_pagado)tickets[tk].pagado=false;
     });
   });
   const pagos=[];
@@ -974,6 +975,20 @@ function movimientosClienteCC(id,ym){
   const all=[...Object.values(tickets),...pagos];
   all.sort((a,b)=>{const ka=a.created_at||(a.day+(a.time||'')),kb=b.created_at||(b.day+(b.time||''));return ka<kb?1:ka>kb?-1:0;});
   return all;
+}
+// Todos los tickets de este cliente, de cualquier mes, que todavía no están marcados como pagados
+function ticketsPendientesCC(id){
+  const tickets={};
+  Object.entries(S.ve).forEach(([d,arr])=>{
+    arr.forEach(v=>{
+      if(v.cliente_cc_id!==id)return;
+      const tk=v.ticket_id||v.id;
+      if(!tickets[tk])tickets[tk]={day:d,time:v.time,created_at:v.created_at,total:0,ticketId:tk,pagado:true};
+      tickets[tk].total+=v.total;
+      if(!v.cc_pagado)tickets[tk].pagado=false;
+    });
+  });
+  return Object.values(tickets).filter(t=>!t.pagado).sort((a,b)=>(a.day+(a.time||'')).localeCompare(b.day+(b.time||'')));
 }
 function rCC(){
   if(ccClienteId)return rCCDetail(ccClienteId);
@@ -1018,24 +1033,29 @@ function rCCDetail(id){
   const saldo=saldoClienteCC(id);
   const ym=arMonth();
   const movs=movimientosClienteCC(id,ym);
+  const pendientes=ticketsPendientesCC(id);
   const movRows=movs.length?movs.map(m=>{
     if(m.tipo==='pago'){
       return`<div class="lote-card" style="border-left:3px solid var(--gn)">
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <div><div style="font-size:12px;font-weight:600;color:var(--gn)">✓ Pago recibido</div><div style="font-size:10px;color:var(--tx3);font-family:var(--mo)">${fDL(m.day)} · ${m.time||''} · ${m.metodo==='transferencia'?'Transferencia':'Efectivo'}</div></div>
+          <div><div style="font-size:12px;font-weight:600;color:var(--gn)">✓ Pago recibido</div><div style="font-size:10px;color:var(--tx3);font-family:var(--mo)">${fDL(m.day)} · ${m.time||''} · ${m.metodo==='transferencia'?'Transferencia':'Efectivo'}${m.descripcion?` · ${esc(m.descripcion)}`:''}</div></div>
           <div style="font-size:14px;font-weight:700;font-family:var(--mo);color:var(--gn)">-${$m(m.monto)}</div>
         </div>
       </div>`;
     }
     const abierto=ccTicketAbierto===m.ticketId;
-    return`<div class="lote-card" style="border-left:3px solid var(--rd);cursor:pointer" onclick="toggleCCTicket('${m.ticketId}')">
+    return`<div class="lote-card" style="border-left:3px solid ${m.pagado?'var(--tx3)':'var(--rd)'};cursor:pointer" onclick="toggleCCTicket('${m.ticketId}')">
       <div style="display:flex;justify-content:space-between;align-items:center">
-        <div><div style="font-size:12px;font-weight:600">Venta — ticket</div><div style="font-size:10px;color:var(--tx3);font-family:var(--mo)">${fDL(m.day)} · ${m.time||''}</div></div>
-        <div style="font-size:14px;font-weight:700;font-family:var(--mo);color:var(--rd)">+${$m(m.total)}</div>
+        <div><div style="font-size:12px;font-weight:600">Venta — ticket ${m.pagado?'<span style="color:var(--gn);font-weight:400">✓ pagado</span>':'<span style="color:var(--rd);font-weight:400">pendiente</span>'}</div><div style="font-size:10px;color:var(--tx3);font-family:var(--mo)">${fDL(m.day)} · ${m.time||''}</div></div>
+        <div style="font-size:14px;font-weight:700;font-family:var(--mo);color:${m.pagado?'var(--tx2)':'var(--rd)'}">+${$m(m.total)}</div>
       </div>
       ${abierto?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--br)">${m.items.map(v=>{const vr=S.vr.find(x=>x.id===v.variant_id),gr=S.sg.find(x=>x.id===v.group_id);return`<div style="font-size:10px;color:var(--tx2);padding:2px 0">${esc(gr?gr.name:'–')}${vr?' › '+esc(vr.name):''} ×${v.qty} = ${$m(v.total)}</div>`;}).join('')}</div>`:`<div style="font-size:9px;color:var(--tx3);font-family:var(--mo);margin-top:4px">Tocá para ver el detalle</div>`}
     </div>`;
   }).join(''):`<div class="empty-row">Sin movimientos este mes</div>`;
+  const pendRows=pendientes.length?pendientes.map(t=>`<label style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--sf2);border-radius:7px;margin-bottom:5px;cursor:pointer">
+    <span style="display:flex;align-items:center;gap:8px"><input type="checkbox" class="cc-tk-check" data-monto="${t.total}" onchange="calcSeleccionCC()" style="width:auto"><span style="font-size:11px;font-family:var(--mo)">${fDL(t.day)} · ${t.time||''}</span></span>
+    <span style="font-size:12px;font-weight:600;font-family:var(--mo)">${$m(t.total)}</span>
+  </label>`).join(''):`<div style="font-size:11px;color:var(--tx3);font-family:var(--mo);padding:6px 0">No hay facturas pendientes de este cliente</div>`;
   return`<button class="btn" onclick="volverCCList()" style="margin-bottom:10px;padding:6px 12px;font-size:11px">← Volver a clientes</button>
   <div class="blk">
     <div style="display:flex;justify-content:space-between;align-items:flex-start">
@@ -1049,8 +1069,10 @@ function rCCDetail(id){
     </div>
   </div>
   <div class="blk"><div class="bt">Registrar pago recibido</div>
-    <div class="fr">
-      <div class="fl"><label>Importe $</label><input type="number" id="cc-pago-monto" placeholder="0"></div>
+    <div style="font-size:10px;color:var(--tx3);font-family:var(--mo);margin-bottom:8px">Tildá qué facturas está pagando el cliente</div>
+    ${pendRows}
+    <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12px;font-weight:700;border-top:1px solid var(--br);margin-top:4px"><span>Total seleccionado</span><span id="cc-total-sel" style="font-family:var(--mo)">$0</span></div>
+    <div class="fr" style="margin-top:8px">
       <div class="fl"><label>Método</label><select id="cc-pago-metodo" onchange="toggleCCPagoMixto()"><option value="efectivo">Efectivo</option><option value="transferencia">Transferencia</option><option value="mixto">Mixto</option></select></div>
     </div>
     <div id="cc-pago-mixto-fields" style="display:none">
@@ -1063,29 +1085,51 @@ function rCCDetail(id){
   </div>
   <div class="sh">Movimientos de ${fM(ym)}</div>${movRows}`;
 }
+function calcSeleccionCC(){
+  const checks=document.querySelectorAll('.cc-tk-check:checked');
+  let tot=0;checks.forEach(c=>tot+=parseFloat(c.dataset.monto)||0);
+  const el=document.getElementById('cc-total-sel');if(el)el.textContent=$m(tot);
+}
 function toggleCCPagoMixto(){
   const sel=document.getElementById('cc-pago-metodo'),f=document.getElementById('cc-pago-mixto-fields');
   if(f)f.style.display=sel?.value==='mixto'?'block':'none';
 }
 async function registrarPagoCC(clienteId){
   const c=S.ccl.find(x=>x.id===clienteId);if(!c)return;
+  const allChecks=[...document.querySelectorAll('.cc-tk-check')];
+  const pendientes=ticketsPendientesCC(clienteId);
+  const seleccionados=pendientes.filter((t,i)=>allChecks[i]?.checked);
+  if(!seleccionados.length)return alert('Tildá al menos una factura pendiente para registrar el pago');
+  const totalSel=seleccionados.reduce((s,t)=>s+t.total,0);
   const metodo=document.getElementById('cc-pago-metodo')?.value;
   let ef=0,tr=0;
   if(metodo==='mixto'){
     ef=parseFloat(document.getElementById('cc-pago-ef')?.value)||0;
     tr=parseFloat(document.getElementById('cc-pago-tr')?.value)||0;
-  }else{
-    const monto=parseFloat(document.getElementById('cc-pago-monto')?.value)||0;
-    if(monto<=0)return alert('Ingresá el importe del pago');
-    if(metodo==='efectivo')ef=monto;else tr=monto;
-  }
-  if(ef<=0&&tr<=0)return alert('Ingresá el importe del pago');
+    if(Math.abs((ef+tr)-totalSel)>1&&!confirm(`El pago cargado (${$m(ef+tr)}) no coincide con el total de las facturas tildadas (${$m(totalSel)}). ¿Continuar igual?`))return;
+  }else if(metodo==='efectivo'){ef=totalSel;}
+  else{tr=totalSel;}
+  const fechas=[...new Set(seleccionados.map(t=>fDL(t.day)))].join(', ');
+  const desc=`Pago Cta.Cte: ${c.nombre} — Ticket${seleccionados.length>1?'s':''} del ${fechas}`;
   const rows=[];
-  if(ef>0)rows.push({id:uid(),day,tipo:'ingreso',descripcion:`Pago Cta.Cte: ${c.nombre}`,metodo:'efectivo',monto:ef,cliente_cc_id:clienteId,usuario:sesion?.nombre||'—',time:arTime()});
-  if(tr>0)rows.push({id:uid(),day,tipo:'ingreso',descripcion:`Pago Cta.Cte: ${c.nombre}`,metodo:'transferencia',monto:tr,cliente_cc_id:clienteId,usuario:sesion?.nombre||'—',time:arTime()});
+  if(ef>0)rows.push({id:uid(),day,tipo:'ingreso',descripcion:desc,metodo:'efectivo',monto:ef,cliente_cc_id:clienteId,usuario:sesion?.nombre||'—',time:arTime()});
+  if(tr>0)rows.push({id:uid(),day,tipo:'ingreso',descripcion:desc,metodo:'transferencia',monto:tr,cliente_cc_id:clienteId,usuario:sesion?.nombre||'—',time:arTime()});
   if(!S.caja[day])S.caja[day]=[];S.caja[day].push(...rows);
+  // Marcar como pagadas las ventas de los tickets seleccionados
+  const ticketIds=new Set(seleccionados.map(t=>t.ticketId));
+  const ventasActualizadas=[];
+  Object.values(S.ve).forEach(arr=>arr.forEach(v=>{
+    if(v.cliente_cc_id===clienteId&&ticketIds.has(v.ticket_id||v.id)){v.cc_pagado=true;ventasActualizadas.push(v);}
+  }));
   save();render();toast(`Pago de ${c.nombre} registrado ✓`);
-  if(online){sync('busy','guardando...');try{for(const r of rows)await sbUp('caja_movimientos',r);sync('ok','guardado')}catch(e){sync('err','error')}}
+  if(online){
+    sync('busy','guardando...');
+    try{
+      for(const r of rows)await sbUp('caja_movimientos',r);
+      for(const v of ventasActualizadas)await sbUp('ventas',{id:v.id,day:v.day,ticket_id:v.ticket_id,variant_id:v.variant_id,group_id:v.group_id,qty:v.qty,stock_used:v.stock_used,price_unit:v.price_unit,descuento_pct:v.descuento_pct,total:v.total,costo_unit_venta:v.costo_unit_venta,pago:v.pago,pago_ef:v.pago_ef,pago_tr:v.pago_tr,cliente_cc_id:v.cliente_cc_id,cc_pagado:true,usuario:v.usuario,time:v.time});
+      sync('ok','guardado');
+    }catch(e){sync('err','error')}
+  }
 }
 
 function rCompras(){
@@ -1255,7 +1299,7 @@ function periodData(matchDay){
   const vsCash=vs.filter(v=>v.pago!=='cuenta_corriente');
   const tv=vsCash.reduce((s,v)=>s+v.total,0);
   const{ef:tvEf,tr:tvTr}=calcEfTr(vsCash);
-  const byG=calcByG(vsCash);
+  const byG=calcByG(vs); // "Ventas por grupo" muestra TODO lo que se vendió (kg/costo/margen), cobrado o no — nada invisible
   const costoVentasTotal=Object.values(byG).reduce((s,g)=>s+g.costo,0);
   const margenBruto=tv-costoVentasTotal;
   const _compraIds=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));

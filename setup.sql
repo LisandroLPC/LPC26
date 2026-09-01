@@ -64,6 +64,7 @@ create table ventas (
   costo_unit_venta numeric default 0,
   pago text not null,
   cliente_cc_id text,
+  cc_pagado boolean default false,
   time text,
   created_at timestamptz default now()
 );

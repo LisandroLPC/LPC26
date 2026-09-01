@@ -56,7 +56,10 @@
         </div>
         <div class="dnav">
           <button class="nb" onclick="chDay(-1)">‹</button>
-          <div class="dnd" id="dnd"></div>
+          <div style="position:relative;display:inline-block">
+            <div class="dnd" id="dnd"></div>
+            <input type="date" id="day-picker" onchange="goToDate(this.value)" style="position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer;border:none;padding:0;margin:0;-webkit-appearance:none">
+          </div>
           <button class="nb" onclick="chDay(1)">›</button>
         </div>
         <button class="nb" onclick="doLogout()" style="font-size:10px;width:auto;padding:0 6px">salir</button>

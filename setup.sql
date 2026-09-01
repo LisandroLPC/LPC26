@@ -3,6 +3,8 @@
 -- Ejecutar en Supabase SQL Editor
 -- ══════════════════════════════════════════════
 
+drop table if exists clientes_cc cascade;
+drop table if exists cierres cascade;
 drop table if exists produccion_items cascade;
 drop table if exists produccion cascade;
 drop table if exists compras_items cascade;
@@ -61,6 +63,7 @@ create table ventas (
   total numeric not null,
   costo_unit_venta numeric default 0,
   pago text not null,
+  cliente_cc_id text,
   time text,
   created_at timestamptz default now()
 );
@@ -73,6 +76,32 @@ create table caja_movimientos (
   descripcion text not null,
   metodo text not null,
   monto numeric not null,
+  cliente_cc_id text,
+  time text,
+  created_at timestamptz default now()
+);
+
+-- CLIENTES DE CUENTA CORRIENTE
+create table clientes_cc (
+  id text primary key,
+  nombre text not null,
+  telefono text,
+  time text,
+  created_at timestamptz default now()
+);
+
+-- CIERRES DE CAJA (efectivo + digital)
+create table cierres (
+  id text primary key,
+  day date not null,
+  total_contado numeric default 0,
+  retiro numeric default 0,
+  saldo_siguiente numeric default 0,
+  fondo_inicial_manual numeric,
+  fondo_digital_manual numeric,
+  saldo_digital_real numeric,
+  saldo_digital_siguiente numeric,
+  detalle text,
   time text,
   created_at timestamptz default now()
 );
@@ -193,6 +222,8 @@ alter table elaboraciones disable row level security;
 alter table elaboraciones_items disable row level security;
 alter table gastos disable row level security;
 alter table insumos disable row level security;
+alter table clientes_cc disable row level security;
+alter table cierres disable row level security;
 
 -- USUARIOS DEFAULT
 insert into usuarios (id, nombre, pin, rol) values

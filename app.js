@@ -1403,9 +1403,8 @@ function rRepMes(mthTabs){
     ${!tg&&!comprasMes?`<div style="font-size:11px;color:var(--tx3);font-family:var(--mo);padding:8px 0">Sin gastos ni compras</div>`:''}
   </div>
   <div class="kpis t3">
-    <div class="kc"><div class="kl">Ef. ventas</div><div class="kv g" style="font-size:14px">${$m(tvEf)}</div></div>
-    <div class="kc"><div class="kl">Tr. ventas</div><div class="kv b" style="font-size:14px">${$m(tvTr)}</div></div>
-    <div class="kc"><div class="kl">Mov. extra</div><div class="kv ${ingTotal-egTotal>=0?'g':'r'}" style="font-size:14px">${$m(ingTotal-egTotal)}</div></div>
+    <div class="kc"><div class="kl">Efectivo total</div><div class="kv g" style="font-size:14px">${$m(tvEf+ingEf-egEf)}</div></div>
+    <div class="kc"><div class="kl">Digital total</div><div class="kv b" style="font-size:14px">${$m(tvTr+ingTr-egTr)}</div></div>
   </div>
   <div class="blk"><div class="bt">Ventas diarias — ${fM(rMonth)}</div><div class="ch-w"><canvas id="cM"></canvas></div></div>
   <button class="btn btng" onclick="exportExcel()" style="width:100%;margin-top:6px">⬇ Exportar todo a Excel</button>`;

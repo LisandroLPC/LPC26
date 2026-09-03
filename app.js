@@ -953,10 +953,9 @@ function saldoClienteCC(id){
   Object.values(S.caja).forEach(arr=>arr.forEach(m=>{if(m.cliente_cc_id===id&&m.tipo==='ingreso')pagos+=m.monto;}));
   return ventas-pagos;
 }
-function movimientosClienteCC(id,ym){
+function movimientosClienteCC(id){
   const tickets={};
   Object.entries(S.ve).forEach(([d,arr])=>{
-    if(!d.startsWith(ym))return;
     arr.forEach(v=>{
       if(v.cliente_cc_id!==id)return;
       const tk=v.ticket_id||v.id;
@@ -967,7 +966,6 @@ function movimientosClienteCC(id,ym){
   });
   const pagos=[];
   Object.entries(S.caja).forEach(([d,arr])=>{
-    if(!d.startsWith(ym))return;
     arr.forEach(m=>{
       if(m.cliente_cc_id===id&&m.tipo==='ingreso')pagos.push({tipo:'pago',day:d,time:m.time,created_at:m.created_at,monto:m.monto,metodo:m.metodo,id:m.id,descripcion:m.descripcion});
     });
@@ -1032,8 +1030,7 @@ function rCCDetail(id){
   const c=S.ccl.find(x=>x.id===id);
   if(!c){ccClienteId=null;return rCC();}
   const saldo=saldoClienteCC(id);
-  const ym=arMonth();
-  const movs=movimientosClienteCC(id,ym);
+  const movs=movimientosClienteCC(id);
   const pendientes=ticketsPendientesCC(id);
   const movRows=movs.length?movs.map(m=>{
     if(m.tipo==='pago'){
@@ -1052,7 +1049,7 @@ function rCCDetail(id){
       </div>
       ${abierto?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--br)">${m.items.map(v=>{const vr=S.vr.find(x=>x.id===v.variant_id),gr=S.sg.find(x=>x.id===v.group_id);return`<div style="font-size:10px;color:var(--tx2);padding:2px 0">${esc(gr?gr.name:'–')}${vr?' › '+esc(vr.name):''} ×${v.qty} = ${$m(v.total)}</div>`;}).join('')}</div>`:`<div style="font-size:9px;color:var(--tx3);font-family:var(--mo);margin-top:4px">Tocá para ver el detalle</div>`}
     </div>`;
-  }).join(''):`<div class="empty-row">Sin movimientos este mes</div>`;
+  }).join(''):`<div class="empty-row">Sin movimientos todavía</div>`;
   const pendRows=pendientes.length?pendientes.map(t=>{
     const abierto=ccTicketAbierto===t.ticketId;
     return`<div style="background:var(--sf2);border-radius:7px;margin-bottom:5px;padding:8px 10px">
@@ -1090,7 +1087,7 @@ function rCCDetail(id){
     </div>
     <button class="btn btnp" onclick="registrarPagoCC('${id}')" style="width:100%;margin-top:6px">✓ Registrar pago</button>
   </div>
-  <div class="sh">Movimientos de ${fM(ym)}</div>${movRows}`;
+  <div class="sh">Historial completo</div>${movRows}`;
 }
 function toggleCCSeleccion(tid,checked){
   if(checked)ccSeleccionados.add(tid);else ccSeleccionados.delete(tid);
@@ -1322,7 +1319,8 @@ function periodData(matchDay){
   const egEf=movs.filter(m=>m.tipo==='egreso'&&m.metodo==='efectivo').reduce((s,m)=>s+m.monto,0);
   const egTr=movs.filter(m=>m.tipo==='egreso'&&m.metodo==='transferencia').reduce((s,m)=>s+m.monto,0);
   const ingTotal=ingEf+ingTr,egTotal=egEf+egTr,resultado=tv+ingTotal-egTotal-tg-tCompras;
-  return{vs,tv,tvEf,tvTr,tg,tCompras,byG,ingEf,ingTr,egEf,egTr,ingTotal,egTotal,resultado,costoVentasTotal,margenBruto};
+  const ingExtra=movs.filter(m=>m.tipo==='ingreso'&&!m.cliente_cc_id).reduce((s,m)=>s+m.monto,0); // ingresos manuales de verdad, sin contar cobros de Cta.Cte (esos ya son parte de la venta)
+  return{vs,tv,tvEf,tvTr,tg,tCompras,byG,ingEf,ingTr,egEf,egTr,ingTotal,egTotal,ingExtra,resultado,costoVentasTotal,margenBruto};
 }
 function mData(ym){return periodData(d=>d.startsWith(ym));}
 function dayData(d0){return periodData(d=>d===d0);}
@@ -1461,7 +1459,7 @@ function cierreDiffsForMonth(ym){
   return{totalDif,detalle,diasCerrados:dias.length};
 }
 function rRepFin(mthTabs){
-  const{tv,tvEf,tvTr,tg,tCompras,byG,ingEf,ingTr,egEf,egTr,ingTotal,egTotal,resultado}=mData(rMonth);
+  const{tv,tvEf,tvTr,tg,tCompras,byG,ingEf,ingTr,egEf,egTr,ingTotal,egTotal,ingExtra,resultado}=mData(rMonth);
   const tGastoTotal=tg+tCompras;
   const ingresoTotal=tv+ingTotal;const margen=ingresoTotal>0?Math.round((resultado/ingresoTotal)*100):0;
   const margenCol=margen>30?'var(--gn)':margen>10?'var(--ac)':'var(--rd)';
@@ -1481,7 +1479,7 @@ function rRepFin(mthTabs){
   <div class="mtabs">${mthTabs}</div>
   <div class="kpis t3"><div class="kc hi"><div class="kl">Ingresos totales</div><div class="kv a">${$m(ingresoTotal)}</div><div class="kh">ventas + extra</div></div><div class="kc"><div class="kl">Gastos totales</div><div class="kv r">${$m(tGastoTotal)}</div><div class="kh" style="font-size:9px;color:var(--tx3)">op. ${$m(tg)} · comp. ${$m(tCompras)}</div></div><div class="kc"><div class="kl">Resultado</div><div class="kv ${resultado>=0?'g':'r'}">${$m(resultado)}</div></div></div>
   <div class="kpis t3"><div class="kc"><div class="kl">Margen</div><div class="kv" style="color:${margenCol}">${margen}%</div></div><div class="kc"><div class="kl">Efectivo total</div><div class="kv g" style="font-size:14px">${$m(tvEf+ingEf-egEf)}</div></div><div class="kc"><div class="kl">Digital total</div><div class="kv b" style="font-size:14px">${$m(tvTr+ingTr-egTr)}</div></div></div>
-  ${ingTotal>0||egTotal>0?`<div class="blk"><div class="bt">Movimientos de caja del período</div><div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--br)"><span style="font-size:11px;color:var(--tx2)">Ingresos extra</span><span style="font-family:var(--mo);color:var(--gn)">${$m(ingTotal)}</span></div><div style="display:flex;justify-content:space-between;padding:5px 0"><span style="font-size:11px;color:var(--tx2)">Egresos extra</span><span style="font-family:var(--mo);color:var(--rd)">${$m(egTotal)}</span></div></div>`:''}
+  ${ingExtra>0||egTotal>0?`<div class="blk"><div class="bt">Movimientos de caja del período</div><div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--br)"><span style="font-size:11px;color:var(--tx2)">Ingresos extra</span><span style="font-family:var(--mo);color:var(--gn)">${$m(ingExtra)}</span></div><div style="display:flex;justify-content:space-between;padding:5px 0"><span style="font-size:11px;color:var(--tx2)">Egresos extra</span><span style="font-family:var(--mo);color:var(--rd)">${$m(egTotal)}</span></div></div>`:''}
   <div class="tbk"><div class="tt">Gastos operativos por categoría</div><table><thead><tr><th>Categoría</th><th>Monto</th><th>%</th></tr></thead><tbody>${catRows}</tbody></table></div>
   ${diasCerrados>0?`<div class="blk"><div class="bt">Diferencias de caja del mes (faltante/sobrante)</div><div style="display:flex;justify-content:space-between;padding:5px 0"><span style="font-size:11px;color:var(--tx2)">Acumulado (${diasCerrados} día${diasCerrados===1?'':'s'} cerrado${diasCerrados===1?'':'s'})</span><span style="font-family:var(--mo);font-weight:600;color:${totalDif>=0?'var(--gn)':'var(--rd)'}">${totalDif>=0?'+':''}${$m(totalDif)}</span></div></div><div class="tbk"><table><thead><tr><th>Día</th><th>Diferencia</th></tr></thead><tbody>${difRows}</tbody></table></div>`:''}
   ${evoRows}

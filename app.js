@@ -931,17 +931,18 @@ async function delElab(id){
 }
 
 function rInsumosBlk(){
-  const rows=S.ins.length?S.ins.map(i=>`<tr><td>${esc(i.name)}</td><td style="color:${(i.stock_qty||0)<1?'var(--or)':'var(--tx)'};font-family:var(--mo)">${fQ(i.stock_qty||0,i.unit)}</td><td><input type="number" class="ip" value="${i.costUnit||0}" onchange="updIns('${i.id}',this.value)"></td><td><button class="dbtn" onclick="delIns('${i.id}')">✕</button></td></tr>`).join(''):`<tr><td colspan="4" class="empty-row">Sin insumos</td></tr>`;
+  const rows=S.ins.length?S.ins.map(i=>`<tr><td>${esc(i.name)}</td><td><input type="number" class="ip" step="0.01" value="${i.stock_qty||0}" onchange="updInsStock('${i.id}',this.value)" style="max-width:75px"></td><td><input type="number" class="ip" value="${i.costUnit||0}" onchange="updIns('${i.id}',this.value)"></td><td><button class="dbtn" onclick="delIns('${i.id}')">✕</button></td></tr>`).join(''):`<tr><td colspan="4" class="empty-row">Sin insumos</td></tr>`;
   return`<div class="blk"><div class="bt">Agregar insumo</div>
     <div class="fr"><div class="fl" style="flex:2"><label>Nombre</label><input type="text" id="ins-n" placeholder="Ej: Pan rallado, Rebozador, Aceite..."></div><div class="fl" style="max-width:75px"><label>Unidad</label><select id="ins-u"><option>kg</option><option>litro</option><option>unidad</option><option>bolsa</option></select></div></div>
     <div class="fr"><div class="fl"><label>Costo/unidad $</label><input type="number" id="ins-c" placeholder="0"></div><button class="btn btnp" onclick="addIns()" style="align-self:flex-end">+ Agregar</button></div>
-    <div style="font-size:9px;color:var(--tx3);font-family:var(--mo);margin-top:3px">Stock entra desde Compras · Sale desde Elaboración</div>
+    <div style="font-size:9px;color:var(--tx3);font-family:var(--mo);margin-top:3px">Stock entra desde Compras · Sale desde Elaboración · También lo podés corregir a mano acá abajo</div>
   </div>
   <div class="tbk"><div class="tt">Insumos — stock y costo</div>
     <table><thead><tr><th>Insumo</th><th>Stock</th><th>Costo $</th><th></th></tr></thead><tbody>${rows}</tbody></table>
   </div>`;
 }
 async function addIns(){const n=document.getElementById('ins-n')?.value.trim(),u=document.getElementById('ins-u')?.value,c=parseFloat(document.getElementById('ins-c')?.value)||0;if(!n||!c)return alert('Completá nombre y costo');if(S.ins.find(i=>i.name===n))return alert('Ya existe');const row={id:uid(),name:n,unit:u,costUnit:c,cost_unit:c,stock_qty:0};S.ins.push(row);save();render();if(online){try{await sbUp('insumos',{id:row.id,name:row.name,unit:row.unit,cost_unit:row.costUnit});sync('ok','guardado')}catch(e){sync('err','error')}}}
+async function updInsStock(id,v){const i=S.ins.find(x=>x.id===id);if(!i)return;i.stock_qty=parseFloat(v)||0;save();toast('Stock corregido ✓');if(online){try{await sbUp('insumos',{id:i.id,name:i.name,unit:i.unit,cost_unit:i.costUnit,stock_qty:i.stock_qty});sync('ok','guardado')}catch(e){sync('err','error')}}}
 async function updIns(id,v){const i=S.ins.find(x=>x.id===id);if(!i)return;i.costUnit=parseFloat(v)||0;i.cost_unit=i.costUnit;save();toast('Costo actualizado ✓');if(online){try{await sbUp('insumos',{id:i.id,name:i.name,unit:i.unit,cost_unit:i.costUnit,stock_qty:i.stock_qty||0});sync('ok','guardado')}catch(e){sync('err','error')}}}
 async function delIns(id){S.ins=S.ins.filter(x=>x.id!==id);save();render();if(online){try{await sbDel('insumos',id)}catch(e){}}}
 

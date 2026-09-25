@@ -40,7 +40,7 @@ let sesion=SC.g('sesion')||null;
 let ticketItems=[],corteItems=[],elabItems=[],compraItems=[];
 let pagoSeleccionado='Efectivo';
 let ccClienteId=null,ccTicketAbierto=null,ccSeleccionados=new Set();
-let charts={},rMonth=arMonth(),rTab='dia',prodTab='corte',cmpA=null,cmpB=null;
+let charts={},rMonth=arMonth(),rTab='dia',prodTab='corte',cmpA=null,cmpB=null,cmpMetric='monto';
 let loginRol='dueno',pinBuf='';
 
 const BILLETES=[20000,10000,2000,1000,500,200,100,50];
@@ -1439,6 +1439,7 @@ function rRepAnual(yr){
 
 function setCmpA(m){cmpA=m;go('reportes')}
 function setCmpB(m){cmpB=m;go('reportes')}
+function setCmpMetric(v){cmpMetric=v;go('reportes')}
 // Diferencia % entre dos valores — devuelve texto con signo, o "—" si no hay base (a=0) para calcular
 function pctTxt(a,b){if(!a)return b?'—':'0%';const p=Math.round(((b-a)/Math.abs(a))*100);return(p>=0?'+':'')+p+'%'}
 function rRepComparar(mths){
@@ -1453,8 +1454,16 @@ function rRepComparar(mths){
 
   const byGA=mData(cmpA).byG,byGB=mData(cmpB).byG;
   const gNames=[...new Set([...Object.keys(byGA),...Object.keys(byGB)])];
-  const gRows=gNames.map(n=>{const a=byGA[n]?.tot||0,b=byGB[n]?.tot||0;return{n,a,b,dif:b-a}}).sort((x,y)=>Math.abs(y.dif)-Math.abs(x.dif))
-    .map(x=>`<tr><td>${esc(x.n)}</td><td style="font-family:var(--mo)">${$m(x.a)}</td><td style="font-family:var(--mo)">${$m(x.b)}</td><td style="font-family:var(--mo);font-weight:600;color:${x.dif>=0?'var(--gn)':'var(--rd)'}">${x.dif>=0?'+':''}${$m(x.dif)}</td><td style="font-family:var(--mo);color:var(--tx3)">${pctTxt(x.a,x.b)}</td></tr>`).join('')||`<tr><td colspan="5" class="empty-row">Sin ventas en ninguno de los dos meses</td></tr>`;
+  const esMonto=cmpMetric==='monto';
+  const fVal=(n,u)=>esMonto?$m(n):fQ(n,u);
+  const gRows=gNames.map(n=>{
+    const ua=byGA[n]?.unit,ub=byGB[n]?.unit,u=ua||ub;
+    const a=esMonto?(byGA[n]?.tot||0):(byGA[n]?.qty||0);
+    const b=esMonto?(byGB[n]?.tot||0):(byGB[n]?.qty||0);
+    return{n,a,b,u,dif:b-a};
+  }).sort((x,y)=>Math.abs(y.dif)-Math.abs(x.dif))
+    .map(x=>`<tr><td>${esc(x.n)}</td><td style="font-family:var(--mo)">${fVal(x.a,x.u)}</td><td style="font-family:var(--mo)">${fVal(x.b,x.u)}</td><td style="font-family:var(--mo);font-weight:600;color:${x.dif>=0?'var(--gn)':'var(--rd)'}">${x.dif>=0?'+':''}${fVal(x.dif,x.u)}</td><td style="font-family:var(--mo);color:var(--tx3)">${pctTxt(x.a,x.b)}</td></tr>`).join('')||`<tr><td colspan="5" class="empty-row">Sin ventas en ninguno de los dos meses</td></tr>`;
+  const metricToggle=`<div class="mtabs" style="margin-bottom:0"><button class="mtab ${esMonto?'active':''}" onclick="setCmpMetric('monto')">$ Monto</button><button class="mtab ${!esMonto?'active':''}" onclick="setCmpMetric('qty')">⚖ Cantidad</button></div>`;
 
   const catA=catGastosMes(cmpA,kA.tCompras),catB=catGastosMes(cmpB,kB.tCompras);
   const cNames=[...new Set([...Object.keys(catA),...Object.keys(catB)])];
@@ -1465,7 +1474,7 @@ function rRepComparar(mths){
   <div class="fr"><div class="fl"><label>Mes A</label>${selA}</div><div class="fl"><label>Mes B</label>${selB}</div></div>
   <div class="blk"><div class="bt">${fM(cmpA)} vs ${fM(cmpB)}</div><div class="ch-w" style="height:155px"><canvas id="cCmp"></canvas></div></div>
   <div class="tbk"><div class="tt">Resumen financiero</div><div class="tbk-hint">→ deslizá para ver la variación</div><div class="tbk-scroll"><table><thead><tr><th></th><th>${fM(cmpA)}</th><th>${fM(cmpB)}</th><th>Var. $</th><th>Var. %</th></tr></thead><tbody>${kpiRows}</tbody></table></div></div>
-  <div class="tbk"><div class="tt">Ventas por grupo — qué explica la diferencia</div><div class="tbk-hint">→ ordenado por mayor variación</div><div class="tbk-scroll"><table><thead><tr><th>Grupo</th><th>${fM(cmpA)}</th><th>${fM(cmpB)}</th><th>Var. $</th><th>Var. %</th></tr></thead><tbody>${gRows}</tbody></table></div></div>
+  <div class="tbk"><div class="tt" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">Ventas por grupo — qué explica la diferencia${metricToggle}</div><div class="tbk-hint">→ ordenado por mayor variación</div><div class="tbk-scroll"><table><thead><tr><th>Grupo</th><th>${fM(cmpA)}</th><th>${fM(cmpB)}</th><th>Var. ${esMonto?'$':'cant.'}</th><th>Var. %</th></tr></thead><tbody>${gRows}</tbody></table></div></div>
   <div class="tbk"><div class="tt">Gastos por categoría</div><div class="tbk-hint">→ ordenado por mayor variación</div><div class="tbk-scroll"><table><thead><tr><th>Categoría</th><th>${fM(cmpA)}</th><th>${fM(cmpB)}</th><th>Var. $</th><th>Var. %</th></tr></thead><tbody>${cRows}</tbody></table></div></div>`;
 }
 

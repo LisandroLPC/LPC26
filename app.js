@@ -40,7 +40,7 @@ let sesion=SC.g('sesion')||null;
 let ticketItems=[],corteItems=[],elabItems=[],compraItems=[];
 let pagoSeleccionado='Efectivo';
 let ccClienteId=null,ccTicketAbierto=null,ccSeleccionados=new Set();
-let charts={},rMonth=arMonth(),rTab='dia',prodTab='corte';
+let charts={},rMonth=arMonth(),rTab='dia',prodTab='corte',cmpA=null,cmpB=null;
 let loginRol='dueno',pinBuf='';
 
 const BILLETES=[20000,10000,2000,1000,500,200,100,50];
@@ -1336,12 +1336,30 @@ function rReportes(){
     <button class="mtab ${rTab==='mes'?'active':''}" onclick="setRTab('mes')">📆 Mes</button>
     <button class="mtab ${rTab==='anual'?'active':''}" onclick="setRTab('anual')">📈 Anual</button>
     <button class="mtab ${rTab==='financiero'?'active':''}" onclick="setRTab('financiero')">💹 Financiero</button>
+    <button class="mtab ${rTab==='comparar'?'active':''}" onclick="setRTab('comparar')">🆚 Comparar</button>
   </div>`;
   if(rTab==='dia')return rTabs+rRepDia();
   if(rTab==='mes')return rTabs+rRepMes(mthTabs);
   if(rTab==='anual')return rTabs+rRepAnual(yr);
   if(rTab==='financiero')return rTabs+rRepFin(mthTabs);
+  if(rTab==='comparar')return rTabs+rRepComparar(mths);
   return'';
+}
+// KPIs financieros de un mes — función única, reutilizada por Financiero y Comparar (evita tener la misma cuenta escrita en dos lugares)
+function finKpis(ym){
+  const{tv,tvEf,tvTr,tg,tCompras,ingEf,ingTr,egEf,egTr,ingTotal,egTotal,ingExtra,resultado}=mData(ym);
+  const tGastoTotal=tg+tCompras;
+  const ingresoTotal=tv+ingTotal;
+  const margen=ingresoTotal>0?Math.round((resultado/ingresoTotal)*100):0;
+  return{tv,tg,tCompras,tGastoTotal,ingresoTotal,margen,resultado,ingExtra,egTotal,efectivoTotal:tvEf+ingEf-egEf,digitalTotal:tvTr+ingTr-egTr};
+}
+// Gastos operativos por categoría de un mes — función única, reutilizada por Financiero y Comparar
+function catGastosMes(ym,tCompras){
+  const _compraIds=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));
+  const catGas={};
+  Object.entries(S.ga).filter(([d])=>d.startsWith(ym)).flatMap(([,g])=>g).filter(g=>!_compraIds.has(g.id)).forEach(g=>{catGas[g.cat]=(catGas[g.cat]||0)+g.amount});
+  if(tCompras>0)catGas['Materia prima (compras)']=(catGas['Materia prima (compras)']||0)+tCompras;
+  return catGas;
 }
 function setRM(m){rMonth=m;go('reportes')}
 function setRTab(t){rTab=t;go('reportes')}
@@ -1419,6 +1437,38 @@ function rRepAnual(yr){
   <button class="btn btng" onclick="exportExcel()" style="width:100%;margin-top:6px">⬇ Exportar todo a Excel</button>`;
 }
 
+function setCmpA(m){cmpA=m;go('reportes')}
+function setCmpB(m){cmpB=m;go('reportes')}
+// Diferencia % entre dos valores — devuelve texto con signo, o "—" si no hay base (a=0) para calcular
+function pctTxt(a,b){if(!a)return b?'—':'0%';const p=Math.round(((b-a)/Math.abs(a))*100);return(p>=0?'+':'')+p+'%'}
+function rRepComparar(mths){
+  if(mths.length<2)return`<div class="tbk"><div style="padding:20px 10px;text-align:center;color:var(--tx3);font-size:11px;font-family:var(--mo)">Necesitás al menos 2 meses con datos cargados para poder comparar.</div></div>`;
+  if(!cmpA||!mths.includes(cmpA))cmpA=mths[1]||mths[0];
+  if(!cmpB||!mths.includes(cmpB)||cmpB===cmpA)cmpB=mths.find(m=>m!==cmpA)||mths[0];
+  const selA=`<select onchange="setCmpA(this.value)" style="width:100%">${mths.map(m=>`<option value="${m}" ${m===cmpA?'selected':''}>${fM(m)}</option>`).join('')}</select>`;
+  const selB=`<select onchange="setCmpB(this.value)" style="width:100%">${mths.map(m=>`<option value="${m}" ${m===cmpB?'selected':''}>${fM(m)}</option>`).join('')}</select>`;
+  const kA=finKpis(cmpA),kB=finKpis(cmpB);
+  const kpiRow=(lbl,va,vb,fmt=$m)=>`<tr><td>${lbl}</td><td style="font-family:var(--mo)">${fmt(va)}</td><td style="font-family:var(--mo)">${fmt(vb)}</td><td style="font-family:var(--mo);font-weight:600;color:${vb>=va?'var(--gn)':'var(--rd)'}">${vb>=va?'+':''}${fmt(vb-va)}</td><td style="font-family:var(--mo);color:var(--tx3)">${pctTxt(va,vb)}</td></tr>`;
+  const kpiRows=kpiRow('Ventas',kA.tv,kB.tv)+kpiRow('Gastos totales',kA.tGastoTotal,kB.tGastoTotal)+kpiRow('Resultado',kA.resultado,kB.resultado)+kpiRow('Margen',kA.margen,kB.margen,v=>v+'%')+kpiRow('Efectivo total',kA.efectivoTotal,kB.efectivoTotal)+kpiRow('Digital total',kA.digitalTotal,kB.digitalTotal);
+
+  const byGA=mData(cmpA).byG,byGB=mData(cmpB).byG;
+  const gNames=[...new Set([...Object.keys(byGA),...Object.keys(byGB)])];
+  const gRows=gNames.map(n=>{const a=byGA[n]?.tot||0,b=byGB[n]?.tot||0;return{n,a,b,dif:b-a}}).sort((x,y)=>Math.abs(y.dif)-Math.abs(x.dif))
+    .map(x=>`<tr><td>${esc(x.n)}</td><td style="font-family:var(--mo)">${$m(x.a)}</td><td style="font-family:var(--mo)">${$m(x.b)}</td><td style="font-family:var(--mo);font-weight:600;color:${x.dif>=0?'var(--gn)':'var(--rd)'}">${x.dif>=0?'+':''}${$m(x.dif)}</td><td style="font-family:var(--mo);color:var(--tx3)">${pctTxt(x.a,x.b)}</td></tr>`).join('')||`<tr><td colspan="5" class="empty-row">Sin ventas en ninguno de los dos meses</td></tr>`;
+
+  const catA=catGastosMes(cmpA,kA.tCompras),catB=catGastosMes(cmpB,kB.tCompras);
+  const cNames=[...new Set([...Object.keys(catA),...Object.keys(catB)])];
+  const cRows=cNames.map(n=>{const a=catA[n]||0,b=catB[n]||0;return{n,a,b,dif:b-a}}).sort((x,y)=>Math.abs(y.dif)-Math.abs(x.dif))
+    .map(x=>`<tr><td>${esc(x.n)}</td><td style="font-family:var(--mo)">${$m(x.a)}</td><td style="font-family:var(--mo)">${$m(x.b)}</td><td style="font-family:var(--mo);font-weight:600;color:${x.dif<=0?'var(--gn)':'var(--rd)'}">${x.dif>=0?'+':''}${$m(x.dif)}</td><td style="font-family:var(--mo);color:var(--tx3)">${pctTxt(x.a,x.b)}</td></tr>`).join('')||`<tr><td colspan="5" class="empty-row">Sin gastos en ninguno de los dos meses</td></tr>`;
+
+  return`
+  <div class="fr"><div class="fl"><label>Mes A</label>${selA}</div><div class="fl"><label>Mes B</label>${selB}</div></div>
+  <div class="blk"><div class="bt">${fM(cmpA)} vs ${fM(cmpB)}</div><div class="ch-w" style="height:155px"><canvas id="cCmp"></canvas></div></div>
+  <div class="tbk"><div class="tt">Resumen financiero</div><div class="tbk-hint">→ deslizá para ver la variación</div><div class="tbk-scroll"><table><thead><tr><th></th><th>${fM(cmpA)}</th><th>${fM(cmpB)}</th><th>Var. $</th><th>Var. %</th></tr></thead><tbody>${kpiRows}</tbody></table></div></div>
+  <div class="tbk"><div class="tt">Ventas por grupo — qué explica la diferencia</div><div class="tbk-hint">→ ordenado por mayor variación</div><div class="tbk-scroll"><table><thead><tr><th>Grupo</th><th>${fM(cmpA)}</th><th>${fM(cmpB)}</th><th>Var. $</th><th>Var. %</th></tr></thead><tbody>${gRows}</tbody></table></div></div>
+  <div class="tbk"><div class="tt">Gastos por categoría</div><div class="tbk-hint">→ ordenado por mayor variación</div><div class="tbk-scroll"><table><thead><tr><th>Categoría</th><th>${fM(cmpA)}</th><th>${fM(cmpB)}</th><th>Var. $</th><th>Var. %</th></tr></thead><tbody>${cRows}</tbody></table></div></div>`;
+}
+
 // Diferencias de caja (faltante/sobrante) acumuladas en el mes — para Reportes financieros
 // Evolución de caja día por día del mes — fondo, movimientos y saldo, todo junto
 function evolucionCajaMes(ym){
@@ -1460,16 +1510,9 @@ function cierreDiffsForMonth(ym){
   return{totalDif,detalle,diasCerrados:dias.length};
 }
 function rRepFin(mthTabs){
-  const{tv,tvEf,tvTr,tg,tCompras,byG,ingEf,ingTr,egEf,egTr,ingTotal,egTotal,ingExtra,resultado}=mData(rMonth);
-  const tGastoTotal=tg+tCompras;
-  const ingresoTotal=tv+ingTotal;const margen=ingresoTotal>0?Math.round((resultado/ingresoTotal)*100):0;
+  const{tv,tvEf,tvTr,tg,tCompras,ingEf,ingTr,egEf,egTr,ingExtra,resultado,tGastoTotal,ingresoTotal,margen,egTotal,efectivoTotal,digitalTotal}=finKpis(rMonth);
   const margenCol=margen>30?'var(--gn)':margen>10?'var(--ac)':'var(--rd)';
-  const _compraIdsFin=new Set(S.co.map(c=>c.gasto_id).filter(Boolean));
-  const catGas={};
-  // gastos operativos por categoria
-  Object.entries(S.ga).filter(([d])=>d.startsWith(rMonth)).flatMap(([,g])=>g).filter(g=>!_compraIdsFin.has(g.id)).forEach(g=>{catGas[g.cat]=(catGas[g.cat]||0)+g.amount});
-  // compras como categoria propia
-  if(tCompras>0)catGas['Materia prima (compras)']=(catGas['Materia prima (compras)']||0)+tCompras;
+  const catGas=catGastosMes(rMonth,tCompras);
   const catRows=Object.entries(catGas).sort((a,b)=>b[1]-a[1]).map(([c,v])=>`<tr><td>${c}</td><td style="font-family:var(--mo)">${$m(v)}</td><td style="font-family:var(--mo);color:var(--tx3)">${Math.round(tGastoTotal>0?(v/tGastoTotal)*100:0)}%</td></tr>`).join('')||`<tr><td colspan="3" class="empty-row">Sin gastos</td></tr>`;
   const{totalDif,detalle:difDetalle,diasCerrados}=cierreDiffsForMonth(rMonth);
   const difRows=difDetalle.map(x=>`<tr><td>${x.d.slice(8,10)}/${x.d.slice(5,7)}</td><td style="font-family:var(--mo);color:${x.dif>=0?'var(--gn)':'var(--rd)'}">${x.dif>=0?'+':''}${$m(x.dif)}</td></tr>`).join('')||`<tr><td colspan="2" class="empty-row">Sin diferencias relevantes</td></tr>`;
@@ -1479,7 +1522,7 @@ function rRepFin(mthTabs){
   return`
   <div class="mtabs">${mthTabs}</div>
   <div class="kpis t3"><div class="kc hi"><div class="kl">Ingresos totales</div><div class="kv a">${$m(ingresoTotal)}</div><div class="kh">ventas + extra</div></div><div class="kc"><div class="kl">Gastos totales</div><div class="kv r">${$m(tGastoTotal)}</div><div class="kh" style="font-size:9px;color:var(--tx3)">op. ${$m(tg)} · comp. ${$m(tCompras)}</div></div><div class="kc"><div class="kl">Resultado</div><div class="kv ${resultado>=0?'g':'r'}">${$m(resultado)}</div></div></div>
-  <div class="kpis t3"><div class="kc"><div class="kl">Margen</div><div class="kv" style="color:${margenCol}">${margen}%</div></div><div class="kc"><div class="kl">Efectivo total</div><div class="kv g" style="font-size:14px">${$m(tvEf+ingEf-egEf)}</div></div><div class="kc"><div class="kl">Digital total</div><div class="kv b" style="font-size:14px">${$m(tvTr+ingTr-egTr)}</div></div></div>
+  <div class="kpis t3"><div class="kc"><div class="kl">Margen</div><div class="kv" style="color:${margenCol}">${margen}%</div></div><div class="kc"><div class="kl">Efectivo total</div><div class="kv g" style="font-size:14px">${$m(efectivoTotal)}</div></div><div class="kc"><div class="kl">Digital total</div><div class="kv b" style="font-size:14px">${$m(digitalTotal)}</div></div></div>
   ${ingExtra>0||egTotal>0?`<div class="blk"><div class="bt">Movimientos de caja del período</div><div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--br)"><span style="font-size:11px;color:var(--tx2)">Ingresos extra</span><span style="font-family:var(--mo);color:var(--gn)">${$m(ingExtra)}</span></div><div style="display:flex;justify-content:space-between;padding:5px 0"><span style="font-size:11px;color:var(--tx2)">Egresos extra</span><span style="font-family:var(--mo);color:var(--rd)">${$m(egTotal)}</span></div></div>`:''}
   <div class="tbk"><div class="tt">Gastos operativos por categoría</div><table><thead><tr><th>Categoría</th><th>Monto</th><th>%</th></tr></thead><tbody>${catRows}</tbody></table></div>
   ${diasCerrados>0?`<div class="blk"><div class="bt">Diferencias de caja del mes (faltante/sobrante)</div><div style="display:flex;justify-content:space-between;padding:5px 0"><span style="font-size:11px;color:var(--tx2)">Acumulado (${diasCerrados} día${diasCerrados===1?'':'s'} cerrado${diasCerrados===1?'':'s'})</span><span style="font-family:var(--mo);font-weight:600;color:${totalDif>=0?'var(--gn)':'var(--rd)'}">${totalDif>=0?'+':''}${$m(totalDif)}</span></div></div><div class="tbk"><table><thead><tr><th>Día</th><th>Diferencia</th></tr></thead><tbody>${difRows}</tbody></table></div>`:''}
@@ -1493,6 +1536,7 @@ function initCharts(){
   const OPTS={responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#8a8680',font:{size:9,family:'DM Mono'}}}},scales:{x:{ticks:{color:'#4e4b48',font:{size:8}},grid:{color:'#252525'}},y:{ticks:{color:'#4e4b48',font:{size:9},callback:v=>'$'+Math.round(v).toLocaleString('es-AR')},grid:{color:'#252525'}}}};
   const cm=document.getElementById('cM');if(cm&&window.Chart){try{if(charts.cM)charts.cM.destroy()}catch(e){}charts.cM=new Chart(cm,{type:'bar',data:{labels:labs,datasets:[{label:'Ventas',data:dV,backgroundColor:'rgba(232,197,71,.7)',borderRadius:3},{label:'Gastos',data:dG,backgroundColor:'rgba(248,113,113,.45)',borderRadius:3}]},options:OPTS});}
   const ca=document.getElementById('cA');if(ca&&window.Chart){try{if(charts.cA)charts.cA.destroy()}catch(e){}const an=yrData(yr);charts.cA=new Chart(ca,{type:'line',data:{labels:an.map(x=>x.lbl),datasets:[{label:'Ventas',data:an.map(x=>x.tv),borderColor:'rgba(232,197,71,.9)',backgroundColor:'rgba(232,197,71,.07)',tension:.3,fill:true,pointRadius:3,borderWidth:2},{label:'Gastos',data:an.map(x=>x.tg),borderColor:'rgba(248,113,113,.7)',backgroundColor:'transparent',tension:.3,pointRadius:3,borderWidth:1.5,borderDash:[4,3]}]},options:OPTS});}
+  const cc=document.getElementById('cCmp');if(cc&&window.Chart&&cmpA&&cmpB){try{if(charts.cCmp)charts.cCmp.destroy()}catch(e){}const kA=finKpis(cmpA),kB=finKpis(cmpB);charts.cCmp=new Chart(cc,{type:'bar',data:{labels:['Ventas','Gastos','Resultado'],datasets:[{label:fM(cmpA),data:[kA.tv,kA.tGastoTotal,kA.resultado],backgroundColor:'rgba(148,148,148,.5)',borderRadius:3},{label:fM(cmpB),data:[kB.tv,kB.tGastoTotal,kB.resultado],backgroundColor:'rgba(232,197,71,.75)',borderRadius:3}]},options:OPTS});}
 }
 
 /* ══ EXCEL ══════════════════════════════════════════════════════ */

@@ -1,4 +1,4 @@
-/* LOS POLLOS CUÑADOS v8 */
+/* LOS POLLOS CUÑADOS v8.1 */
 const SB=window.LPC_SB||'https://pfxvkvvzxpwobtynupgk.supabase.co';
 const SK='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBmeHZrdnZ6eHB3b2J0eW51cGdrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxNjM3NjIsImV4cCI6MjA5MDczOTc2Mn0.H2tqmv0T9npDmNW3Pid2qnUSze7EHvO1ky0-NQzmFIY';
 const SBH={'apikey':SK,'Authorization':'Bearer '+SK,'Content-Type':'application/json','Prefer':'return=minimal'};
@@ -971,7 +971,7 @@ function setSubproducto(id,on){
   if(!confirm(on?`¿Marcar "${g.name}" como SUBPRODUCTO?\n\n• Su costo pasa a $0.\n• En los próximos cortes, el costo del cajón se reparte solo entre los cortes principales.\n• Lo cargás igual en el corte, con sus kg reales.`:`¿Sacar la marca de subproducto a "${g.name}"?\n\nEn los próximos cortes va a cargar costo como un corte principal.`)){render();return;}
   g.subproducto=on;
   if(on){g.cost_unit=0;g.cost_manual_at=new Date().toISOString();}
-  else{g.cost_manual_at=new Date().toISOString();} // arranca de cero con los próximos lotes
+  else{g.cost_manual_at=null;recalcCosto(g);} // vuelve a tomar el costo de sus lotes (compras/cortes)
   save();render();sbUp('stock_groups',sgRow(g));toast(on?`${g.name}: subproducto ✓`:`${g.name}: corte principal ✓`);
 }
 function updGS(id,v){const g=S.sg.find(x=>x.id===id);if(!g)return;g.stock_qty=parseFloat(v)||0;save();toast('Stock actualizado ✓');sbUp('stock_groups',sgRow(g));}

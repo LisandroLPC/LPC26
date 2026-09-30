@@ -224,6 +224,9 @@ alter table ventas add column if not exists cliente_id text;
 -- Fecha del último costo cargado a mano (el costo promedio arranca a contar desde ahí)
 alter table stock_groups add column if not exists cost_manual_at timestamptz;
 
+-- Subproductos (carcaza, menudos): costo $0, el costo del cajón lo cargan los cortes principales
+alter table stock_groups add column if not exists subproducto boolean default false;
+
 -- Precios especiales por cliente
 create table if not exists cliente_precios (
   id text primary key,

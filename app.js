@@ -1,4 +1,4 @@
-/* LOS POLLOS CUÑADOS v7 */
+/* LOS POLLOS CUÑADOS v8 */
 const SB=window.LPC_SB||'https://pfxvkvvzxpwobtynupgk.supabase.co';
 const SK='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBmeHZrdnZ6eHB3b2J0eW51cGdrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxNjM3NjIsImV4cCI6MjA5MDczOTc2Mn0.H2tqmv0T9npDmNW3Pid2qnUSze7EHvO1ky0-NQzmFIY';
 const SBH={'apikey':SK,'Authorization':'Bearer '+SK,'Content-Type':'application/json','Prefer':'return=minimal'};
@@ -172,8 +172,10 @@ function lotesGrupo(gid){
     const c=S.co.find(x=>x.id===i.compra_id);if(c)L.push({day:c.day,qty:+(i.qty_real||i.qty_compra)||0,cu:+i.cost_unit_calculado,src:'Compra '+c.proveedor});
   });
   S.cti.forEach(i=>{
-    if(i.group_id!==gid||!(i.cost_unit_aplicado>0))return;
-    const c=S.ct.find(x=>x.id===i.corte_id);if(c)L.push({day:c.day,qty:+i.qty||0,cu:+i.cost_unit_aplicado,src:'Corte '+c.nombre});
+    if(i.group_id!==gid)return;
+    const c=S.ct.find(x=>x.id===i.corte_id);
+    // corte con lote de cajón: el ítem es un lote aunque su costo sea 0 (subproducto)
+    if(c&&(i.cost_unit_aplicado>0||c.origen_compra_item_id))L.push({day:c.day,qty:+i.qty||0,cu:+i.cost_unit_aplicado||0,src:'Corte '+c.nombre});
   });
   S.el.forEach(e=>{
     if(e.output_group_id!==gid||!(e.output_qty>0)||!(e.costo_total_info>0))return;
@@ -191,13 +193,14 @@ function lotesVigentes(g){
   return W.length?W:[L[0]];
 }
 function recalcCosto(g){
+  if(g.subproducto){g.cost_unit=0;return;} // subproducto: su costo ya lo pagan los cortes principales
   const W=lotesVigentes(g);
   if(!W.length)return; // sin lotes: queda el costo que tenía (el manual o el anterior)
   const kg=W.reduce((s,l)=>s+l.qty,0);
   g.cost_unit=W.reduce((s,l)=>s+l.qty*l.cu,0)/kg;
 }
 // Filas completas para subir (siempre los mismos campos)
-function sgRow(g){return{id:g.id,name:g.name,unit:g.unit,tipo:g.tipo,stock_qty:g.stock_qty||0,cost_unit:g.cost_unit||0,cost_manual_at:g.cost_manual_at||null};}
+function sgRow(g){const r={id:g.id,name:g.name,unit:g.unit,tipo:g.tipo,stock_qty:g.stock_qty||0,cost_unit:g.cost_unit||0,cost_manual_at:g.cost_manual_at||null};if(g.subproducto!==undefined)r.subproducto=!!g.subproducto;return r;}
 function insRow(i){return{id:i.id,name:i.name,unit:i.unit,cost_unit:i.costUnit??i.cost_unit??0,stock_qty:i.stock_qty||0};}
 function subirGrupos(ids){[...new Set(ids)].forEach(id=>{const g=S.sg.find(x=>x.id===id);if(g)sbUp('stock_groups',sgRow(g));});}
 function subirInsumos(ids){[...new Set(ids)].forEach(id=>{const i=S.ins.find(x=>x.id===id);if(i)sbUp('insumos',insRow(i));});}
@@ -858,7 +861,8 @@ function rStock(){
     const max=Math.max(...S.sg.filter(x=>(x.tipo||'venta')===tipo).map(x=>x.stock_qty||0),1),pct=Math.min(100,Math.round(((g.stock_qty||0)/max)*100));
     const col=(g.stock_qty||0)<2?'var(--rd)':(g.stock_qty||0)<5?'var(--or)':'var(--gn)';
     return`<tr><td><div style="font-size:12px">${esc(g.name)} <span style="font-size:9px;color:var(--tx3)">${g.unit||'kg'}</span></div>
-      ${tipo==='venta'?`<div style="font-size:9px;color:var(--tx3)">${S.vr.filter(v=>v.group_id===g.id).map(v=>esc(v.name)).join(', ')||'sin variantes'}</div>`:''}
+      ${tipo==='venta'?`<div style="font-size:9px;color:var(--tx3)">${S.vr.filter(v=>v.group_id===g.id).map(v=>esc(v.name)).join(', ')||'sin variantes'}</div>
+      <label style="display:flex;align-items:center;gap:4px;font-size:9px;font-family:var(--mo);color:${g.subproducto?'var(--ac)':'var(--tx3)'};margin-top:2px;cursor:pointer"><input type="checkbox" ${g.subproducto?'checked':''} onchange="setSubproducto('${g.id}',this.checked)" style="width:auto;margin:0"> subproducto</label>`:''}
       <div class="sb-w"><div class="sb" style="width:${pct}%;background:${col}"></div></div></td>
       <td style="color:${col};font-family:var(--mo);font-weight:500">${fQ(g.stock_qty,g.unit)}</td>
       <td><input type="number" class="ip" value="${+(g.stock_qty||0).toFixed(3)}" step="0.1" onchange="updGS('${g.id}',this.value)"></td>
@@ -940,6 +944,7 @@ function rStock(){
 }
 // Detalle de cómo se llegó al costo (debajo del input de costo en Stock)
 function infoCosto(g){
+  if(g.subproducto)return`<div style="font-size:8px;color:var(--ac);font-family:var(--mo);margin-top:2px">subproducto: $0</div>`;
   const W=lotesVigentes(g);
   if(!W.length)return`<div style="font-size:8px;color:var(--tx3);font-family:var(--mo);margin-top:2px">${g.cost_manual_at?'a mano el '+fD(String(g.cost_manual_at).slice(0,10)):'sin lotes'}</div>`;
   const kg=W.reduce((s,l)=>s+l.qty,0);
@@ -959,6 +964,15 @@ function recalcularTodos(){
   const txt=cambios.map(c=>`• ${c.g.name}: ${$m(c.antes)} → ${$m(c.g.cost_unit)}`).join('\n');
   if(!confirm('Estos costos cambian con el promedio de lotes:\n\n'+txt+'\n\n¿Guardarlos?')){cambios.forEach(c=>c.g.cost_unit=c.antes);return;}
   save();render();subirGrupos(cambios.map(c=>c.g.id));toast(`${cambios.length} costo(s) actualizados ✓`);
+}
+// Subproducto (carcaza, menudos...): costo $0; el costo del cajón lo cargan los cortes principales
+function setSubproducto(id,on){
+  const g=S.sg.find(x=>x.id===id);if(!g)return;
+  if(!confirm(on?`¿Marcar "${g.name}" como SUBPRODUCTO?\n\n• Su costo pasa a $0.\n• En los próximos cortes, el costo del cajón se reparte solo entre los cortes principales.\n• Lo cargás igual en el corte, con sus kg reales.`:`¿Sacar la marca de subproducto a "${g.name}"?\n\nEn los próximos cortes va a cargar costo como un corte principal.`)){render();return;}
+  g.subproducto=on;
+  if(on){g.cost_unit=0;g.cost_manual_at=new Date().toISOString();}
+  else{g.cost_manual_at=new Date().toISOString();} // arranca de cero con los próximos lotes
+  save();render();sbUp('stock_groups',sgRow(g));toast(on?`${g.name}: subproducto ✓`:`${g.name}: corte principal ✓`);
 }
 function updGS(id,v){const g=S.sg.find(x=>x.id===id);if(!g)return;g.stock_qty=parseFloat(v)||0;save();toast('Stock actualizado ✓');sbUp('stock_groups',sgRow(g));}
 // Costo a mano: queda ese valor y el promedio de lotes vuelve a arrancar desde hoy
@@ -1010,24 +1024,43 @@ function setProdTab(t){prodTab=t;render();}
 
 function lotesMpcPendientes(){return S.coi.filter(x=>x.tipo_destino==='materia_prima_cruda'&&!x.usado);}
 // Rinde de un corte: kg cortados sobre kg del lote (cajón)
-function rindeCorte(loteKg,items){const kg=items.filter(x=>(x.unit||'kg')==='kg').reduce((s,x)=>s+(+x.qty||0),0);return loteKg>0&&kg>0?kg/loteKg:null;}
-function rindeCorteTxt(r,loteKg,items){
+/* Corte de un cajón:
+   - Los cortes PRINCIPALES (cuartos, supremas, alas, entero...) cargan todo el costo del cajón:
+     costo/kg = precio del cajón ÷ kg de cortes principales. Así la merma y los subproductos
+     ya quedan pagados dentro del costo de los principales.
+   - Los SUBPRODUCTOS (carcaza, menudos...) entran al stock con costo $0.
+   - Merma = kg del cajón − (principales + subproductos): agua, sangre, recortes.            */
+function esSub(gid){return!!S.sg.find(g=>g.id===gid)?.subproducto;}
+function desgloseCorte(loteKg,items){
+  const kgOf=arr=>arr.filter(x=>(x.unit||'kg')==='kg').reduce((s,x)=>s+(+x.qty||0),0);
+  const princ=kgOf(items.filter(x=>!esSub(x.group_id))),sub=kgOf(items.filter(x=>esSub(x.group_id)));
+  return{princ,sub,merma:loteKg-princ-sub,r:loteKg>0&&(princ+sub)>0?(princ+sub)/loteKg:null};
+}
+function rindeCorte(loteKg,items){return desgloseCorte(loteKg,items).r;}
+function costoKgPrincipal(lote,items){const d=desgloseCorte(+lote.qty_real||+lote.qty_compra||0,items);return d.princ>0?lote.precio_total/d.princ:0;}
+function rindeCorteTxt(r,loteKg,items,lote){
   if(r==null)return'';
-  const kg=items.filter(x=>(x.unit||'kg')==='kg').reduce((s,x)=>s+(+x.qty||0),0);
+  const d=desgloseCorte(loteKg,items);
   const mal=r>1.02||r<0.85;
-  return`<div style="font-size:10px;font-family:var(--mo);color:${mal?'var(--rd)':'var(--gn)'};padding:3px 0">${mal?'⚠ ':''}Rinde: ${Math.round(r*100)}% del lote (${fQ(kg,'kg')} de ${fQ(loteKg,'kg')})${r>1.02?' — sale más de lo que entró, revisá los pesos':r<0.85?' — merma alta, revisá los pesos':''}</div>`;
+  const pct=x=>loteKg>0?Math.round(x/loteKg*100)+'%':'';
+  const ckg=lote&&d.princ>0?lote.precio_total/d.princ:0;
+  return`<div style="font-size:10px;font-family:var(--mo);padding:4px 0;line-height:1.6">
+    <div style="color:var(--tx2)">Principales: <b>${fQ(d.princ,'kg')}</b> (${pct(d.princ)}) · Subproductos: <b>${fQ(d.sub,'kg')}</b> (${pct(d.sub)}) · <span style="color:${mal?'var(--rd)':'var(--tx2)'}">Merma: <b>${fQ(d.merma,'kg')}</b> (${pct(d.merma)})</span></div>
+    ${ckg?`<div style="color:var(--ac)">Costo de los principales: <b>${$m(ckg)}/kg</b> · subproductos $0</div>`:''}
+    ${mal?`<div style="color:var(--rd)">⚠ ${r>1.02?'Sale más de lo que entró, revisá los pesos':'Merma alta, revisá los pesos'}</div>`:''}
+  </div>`;
 }
 function rCorte(){
   const todC=S.ct.filter(c=>c.day===day);
-  const sgVOpts=sgV().map(g=>`<option value="${g.id}" data-u="${g.unit||'kg'}">${esc(g.name)} (${g.unit||'kg'})</option>`).join('');
+  const sgVOpts=sgV().map(g=>`<option value="${g.id}" data-u="${g.unit||'kg'}">${esc(g.name)} (${g.unit||'kg'})${g.subproducto?' · subproducto':''}</option>`).join('');
   const lotes=lotesMpcPendientes();
   const loteOpts=lotes.map(l=>{const kg=l.qty_real||l.qty_compra,ckg=l.precio_total/kg,c=S.co.find(x=>x.id===l.compra_id);return`<option value="${l.id}" data-ckg="${ckg}" data-kg="${kg}">${c?fD(c.day)+' · ':''}${esc(l.descripcion)} — ${fQ(kg,'kg')} — ${$d2(ckg)}/kg</option>`}).join('');
   const cards=todC.length?todC.map(c=>{
     const items=S.cti.filter(i=>i.corte_id===c.id);
     const lote=c.origen_compra_item_id?S.coi.find(x=>x.id===c.origen_compra_item_id):null;
     const loteKg=lote?(+lote.qty_real||+lote.qty_compra||0):0;
-    return`<div class="lote-card"><div class="lote-card-header"><div><div style="font-size:13px;font-weight:600">${esc(c.nombre)}</div><div style="font-size:10px;color:var(--tx3);font-family:var(--mo)">${c.time||''}${c.origen_compra_item_id?' · con costeo':' · sin costeo'}</div></div><button class="dbtn" onclick="delCorte('${c.id}')">✕</button></div>${lote?rindeCorteTxt(rindeCorte(loteKg,items),loteKg,items):''}${items.length?`<div class="lote-card-items">${items.map(i=>`<div style="font-size:10px;color:var(--tx2);padding:2px 0">+ ${fQ(i.qty,i.unit)} → ${esc(i.nombre)}${i.cost_unit_aplicado?' — '+$d2(i.cost_unit_aplicado)+'/kg':''}</div>`).join('')}</div>`:''}</div>`;}).join(''):`<div class="empty-row">Sin cortes hoy</div>`;
-  return`<div class="info-box green">✂ Elegí el lote de materia prima (cajón) del que sale este trozado — el costo/kg de ese lote se reparte igual entre todos los cortes que cargues. Si no elegís lote, se suma stock sin costo.</div>
+    return`<div class="lote-card"><div class="lote-card-header"><div><div style="font-size:13px;font-weight:600">${esc(c.nombre)}</div><div style="font-size:10px;color:var(--tx3);font-family:var(--mo)">${c.time||''}${c.origen_compra_item_id?' · con costeo':' · sin costeo'}</div></div><button class="dbtn" onclick="delCorte('${c.id}')">✕</button></div>${lote?rindeCorteTxt(rindeCorte(loteKg,items),loteKg,items,lote):''}${items.length?`<div class="lote-card-items">${items.map(i=>`<div style="font-size:10px;color:var(--tx2);padding:2px 0">+ ${fQ(i.qty,i.unit)} → ${esc(i.nombre)}${lote?(i.cost_unit_aplicado?' — '+$m(i.cost_unit_aplicado)+'/kg':' — subproducto $0'):''}</div>`).join('')}</div>`:''}</div>`;}).join(''):`<div class="empty-row">Sin cortes hoy</div>`;
+  return`<div class="info-box green">✂ Elegí el cajón del que sale este trozado y cargá <b>todo</b> lo que salió, pesado: cortes principales y también carcaza y menudos. El costo del cajón lo cargan solo los <b>principales</b>; los <b>subproductos</b> (marcados en Stock) entran a $0. Lo que falta para llegar a los kg del cajón es merma.</div>
   <div class="blk"><div class="bt">Nuevo corte</div>
     <div class="fr"><div class="fl" style="flex:2"><label>Nombre</label><input type="text" id="ct-n" placeholder="Ej: Corte mañana, Tanda 1..."></div><div class="fl"><label>Nota</label><input type="text" id="ct-note" placeholder="opcional"></div></div>
     <div class="fr"><div class="fl" style="flex:2"><label>Lote de materia prima (cajón)</label><select id="ct-lote" onchange="onCtLote()"><option value="">Sin costeo (no hay factura de cajón)</option>${loteOpts}</select></div></div>
@@ -1046,8 +1079,8 @@ function renderCorteItems(){
   const list=document.getElementById('corte-items-list');if(!list)return;
   if(!corteItems.length){list.innerHTML=`<div style="font-size:11px;color:var(--tx3);font-family:var(--mo);padding:4px 0">Sin cortes agregados</div>`;return;}
   const lote=loteSeleccionado(),loteKg=lote?(+lote.qty_real||+lote.qty_compra||0):0;
-  list.innerHTML=corteItems.map((x,i)=>`<div class="pvi"><div><div class="pvn">${esc(x.nombre)} <span class="tag tv">+${fQ(x.qty,x.unit)}</span></div></div><button class="dbtn" onclick="rmCorteItem(${i})">✕</button></div>`).join('')
-    +(lote?rindeCorteTxt(rindeCorte(loteKg,corteItems),loteKg,corteItems):'');
+  list.innerHTML=corteItems.map((x,i)=>`<div class="pvi"><div><div class="pvn">${esc(x.nombre)} <span class="tag tv">+${fQ(x.qty,x.unit)}</span>${esSub(x.group_id)?' <span class="tag to">subproducto</span>':''}</div></div><button class="dbtn" onclick="rmCorteItem(${i})">✕</button></div>`).join('')
+    +(lote?rindeCorteTxt(rindeCorte(loteKg,corteItems),loteKg,corteItems,lote):'');
 }
 function addCorteItem(){const sel=document.getElementById('ci-grp'),opt=sel?.options[sel.selectedIndex],gid=sel?.value,qty=parseFloat(document.getElementById('ci-qty')?.value)||0;if(!gid||!qty)return alert('Seleccioná grupo y cantidad');const g=S.sg.find(x=>x.id===gid);corteItems.push({group_id:gid,nombre:g?g.name:gid,qty,unit:opt?.dataset?.u||g?.unit||'kg'});document.getElementById('ci-qty').value='';renderCorteItems();}
 function rmCorteItem(i){corteItems.splice(i,1);renderCorteItems();}
@@ -1057,11 +1090,12 @@ function saveCorte(){
   if(!nom)return alert('Ingresá un nombre');if(!corteItems.length)return alert('Agregá al menos un corte');
   const lote=loteId?S.coi.find(x=>x.id===loteId):null;
   const loteKg=lote?(+lote.qty_real||+lote.qty_compra||0):0;
-  const costoKg=lote&&loteKg>0?lote.precio_total/loteKg:0;
+  const costoKg=lote?costoKgPrincipal(lote,corteItems):0;
+  if(lote&&!(costoKg>0))return alert('Cargá al menos un corte principal (no subproducto): son los que cargan el costo del cajón.');
   const r=lote?rindeCorte(loteKg,corteItems):null;
   if(r!=null&&(r>1.02||r<0.85)&&!confirm(`El corte da ${Math.round(r*100)}% del lote (${fQ(loteKg,'kg')}). ${r>1?'Sale más de lo que entró.':'La merma es alta.'}\n\n¿Los pesos están bien? Aceptar = guardar igual.`))return;
   const cId=uid(),corte={id:cId,day,nombre:nom,note:note||null,origen_compra_item_id:loteId||null,usuario:sesion?.nombre||'—',time:arTime()};
-  const items=corteItems.map(x=>({id:uid(),corte_id:cId,group_id:x.group_id,nombre:x.nombre,qty:x.qty,unit:x.unit,cost_unit_aplicado:lote?costoKg:0}));
+  const items=corteItems.map(x=>({id:uid(),corte_id:cId,group_id:x.group_id,nombre:x.nombre,qty:x.qty,unit:x.unit,cost_unit_aplicado:lote&&!esSub(x.group_id)?costoKg:0}));
   S.ct.push(corte);S.cti.push(...items);
   items.forEach(x=>{const g=S.sg.find(sg=>sg.id===x.group_id);if(g)g.stock_qty=(g.stock_qty||0)+x.qty;});
   if(lote){lote.usado=true;items.forEach(x=>{const g=S.sg.find(sg=>sg.id===x.group_id);if(g)recalcCosto(g);});}

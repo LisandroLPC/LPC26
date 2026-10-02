@@ -1,13 +1,50 @@
-/* LOS POLLOS CUÑADOS v8.3 */
+/* LOS POLLOS CUÑADOS v9.0 */
 const SB=window.LPC_SB||'https://pfxvkvvzxpwobtynupgk.supabase.co';
 const SK='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBmeHZrdnZ6eHB3b2J0eW51cGdrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxNjM3NjIsImV4cCI6MjA5MDczOTc2Mn0.H2tqmv0T9npDmNW3Pid2qnUSze7EHvO1ky0-NQzmFIY';
-const SBH={'apikey':SK,'Authorization':'Bearer '+SK,'Content-Type':'application/json','Prefer':'return=minimal'};
+const LC={g(k){try{return JSON.parse(localStorage.getItem('lpc6_'+k))||null}catch{return null}},s(k,v){localStorage.setItem('lpc6_'+k,JSON.stringify(v))}};
+
+/* ══ ACCESO DEL DISPOSITIVO (Supabase Auth) ═══════════════════════
+   Cada dispositivo inicia sesión UNA vez con la cuenta del local y queda vinculado.
+   El token dura 1 hora y se renueva solo. Sin internet se sigue trabajando:
+   todo queda en la cola y sube cuando vuelve la conexión.
+   Sin sesión válida la base no deja leer ni escribir nada (RLS).          */
+let authNecesaria=false,refrescando=null;
+function auGet(){return LC.g('auth');}
+function auGuardar(j){LC.s('auth',{access_token:j.access_token,refresh_token:j.refresh_token,expires_at:Date.now()+((j.expires_in||3600)*1000),email:j.user?.email||auGet()?.email||''});authNecesaria=false;}
+function auRefrescar(){
+  if(refrescando)return refrescando;
+  refrescando=(async()=>{
+    const a=auGet();if(!a?.refresh_token){authNecesaria=true;return false;}
+    let r;
+    try{r=await fetch(SB+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{apikey:SK,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:a.refresh_token})});}
+    catch(e){return false;} // sin conexión: se reintenta en el próximo pedido
+    if(r.ok){auGuardar(await r.json());return true;}
+    const b=auGet();if(b&&b.refresh_token!==a.refresh_token)return true; // otra pestaña lo renovó recién
+    if(r.status>=400&&r.status<500)authNecesaria=true; // sesión vencida o revocada: hay que volver a ingresar
+    return false;
+  })().finally(()=>{refrescando=null;});
+  return refrescando;
+}
+async function auToken(){
+  const a=auGet();if(!a)return null;
+  if(a.expires_at-Date.now()<120000)await auRefrescar();
+  return auGet()?.access_token||null;
+}
+async function sbH(extra){const t=await auToken();return{apikey:SK,'Content-Type':'application/json','Prefer':'return=minimal',Authorization:'Bearer '+(t||SK),...(extra||{})};}
 // Error de red (reintentable) vs. error de la base (permanente: dato o columna inválida)
 function sbErr(msg,permanente){const e=new Error(msg);e.permanente=permanente;return e;}
-async function sbFetch(url,opt){
+async function sbFetch(url,opt,reintento){
   let r;
   try{r=await fetch(url,opt);}catch(e){throw sbErr('Sin conexión',false);}
-  if(!r.ok){const txt=await r.text().catch(()=>'');throw sbErr(txt||('HTTP '+r.status),r.status>=400&&r.status<500&&r.status!==408&&r.status!==429);}
+  const sinPermiso=r.status===401||r.status===403;
+  if(sinPermiso&&!reintento&&auGet()&&await auRefrescar())
+    return sbFetch(url,{...opt,headers:{...opt.headers,Authorization:'Bearer '+auGet().access_token}},true);
+  if(!r.ok){
+    const txt=await r.text().catch(()=>'');
+    if(sinPermiso)authNecesaria=true;
+    // sin permiso NO es error del dato: queda en la cola hasta que el dispositivo vuelva a ingresar
+    throw sbErr(txt||('HTTP '+r.status),r.status>=400&&r.status<500&&!sinPermiso&&r.status!==408&&r.status!==429);
+  }
   return r;
 }
 // Lee TODA la tabla, de a 1000 filas (Supabase no devuelve más de 1000 por consulta)
@@ -15,17 +52,16 @@ const SB_PAGINA=1000;
 async function sbQ(t,q=''){
   let filas=[],desde=0;
   while(true){
-    const r=await sbFetch(SB+'/rest/v1/'+t+'?'+q,{headers:{...SBH,'Range-Unit':'items','Range':desde+'-'+(desde+SB_PAGINA-1)}});
+    const r=await sbFetch(SB+'/rest/v1/'+t+'?'+q,{headers:await sbH({'Range-Unit':'items','Range':desde+'-'+(desde+SB_PAGINA-1)})});
     const lote=await r.json();
     filas=filas.concat(lote);
     if(lote.length<SB_PAGINA)return filas;
     desde+=SB_PAGINA;
   }
 }
-async function sbUpRaw(t,d){const arr=Array.isArray(d)?d:[d];await sbFetch(SB+'/rest/v1/'+t,{method:'POST',headers:{...SBH,'Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(arr)});}
-async function sbDelRaw(t,id){await sbFetch(SB+'/rest/v1/'+t+'?id=eq.'+encodeURIComponent(id),{method:'DELETE',headers:SBH});}
+async function sbUpRaw(t,d){const arr=Array.isArray(d)?d:[d];await sbFetch(SB+'/rest/v1/'+t,{method:'POST',headers:await sbH({'Prefer':'resolution=merge-duplicates,return=minimal'}),body:JSON.stringify(arr)});}
+async function sbDelRaw(t,id){await sbFetch(SB+'/rest/v1/'+t+'?id=eq.'+encodeURIComponent(id),{method:'DELETE',headers:await sbH()});}
 
-const LC={g(k){try{return JSON.parse(localStorage.getItem('lpc6_'+k))||null}catch{return null}},s(k,v){localStorage.setItem('lpc6_'+k,JSON.stringify(v))}};
 
 /* ══ COLA DE SINCRONIZACIÓN ═══════════════════════════════════════
    Todo lo que se guarda pasa por acá: primero queda en el celular (cola),
@@ -54,9 +90,10 @@ async function flush(){
     }
   }
   flushing=false;updSync();
-  if(OBerr.length&&tab==='caja')render();
+  if((OBerr.length&&tab==='caja')||authNecesaria)render();
 }
 function updSync(){
+  if(authNecesaria){sync('err','sin sesión');return;}
   if(OBerr.length)sync('err',OBerr.length+' con error');
   else if(OB.length)sync('busy',OB.length+' sin subir');
   else sync('ok','sincronizado');
@@ -69,8 +106,10 @@ function descartarErrores(){
 }
 function verErrores(){alert(OBerr.map((o,i)=>`${i+1}) ${o.k==='del'?'Borrar':'Guardar'} en ${o.t}${o.d&&!Array.isArray(o.d)&&o.d.descripcion?' — '+o.d.descripcion:''}\n   ${o.err}`).join('\n\n')||'Sin errores');}
 function bannerSync(){
-  if(!OBerr.length)return'';
-  return`<div class="alrt" style="display:block">⚠ ${OBerr.length} registro(s) no se pudieron guardar en la nube (la base los rechazó). Siguen guardados en este celular.
+  const aviso=authNecesaria?`<div class="alrt" style="display:block">🔒 Este dispositivo tiene que <b>volver a iniciar sesión</b>. Lo que cargues queda guardado acá y se sube cuando ingreses.${OB.length?` (${OB.length} pendiente${OB.length===1?'':'s'})`:''}
+    <button class="btn btnp" onclick="pedirReingreso()" style="width:100%;margin-top:8px;padding:6px">Iniciar sesión</button></div>`:'';
+  if(!OBerr.length)return aviso;
+  return aviso+`<div class="alrt" style="display:block">⚠ ${OBerr.length} registro(s) no se pudieron guardar en la nube (la base los rechazó). Siguen guardados en este celular.
     <div style="display:flex;gap:6px;margin-top:8px"><button class="btn" onclick="reintentarErrores()" style="flex:1;padding:6px">↻ Reintentar</button><button class="btn" onclick="verErrores()" style="flex:1;padding:6px">Ver detalle</button>${sesion?.rol==='dueno'?`<button class="btn" onclick="descartarErrores()" style="flex:1;padding:6px;color:var(--rd)">Descartar</button>`:''}</div></div>`;
 }
 // Vuelve a aplicar sobre los datos recién bajados lo que todavía no subió (así no desaparece de la pantalla)
@@ -277,7 +316,8 @@ function abrirCalendario(){
   else{dp.focus();dp.click();}
 }
 
-function initApp(){day=arDay();ultimoDiaVisto=day;buildNav();updSync();render();flush();loadAll();}
+let appIniciada=false;
+function initApp(){appIniciada=true;day=arDay();ultimoDiaVisto=day;buildNav();updSync();render();flush();loadAll();}
 
 async function loadAll(){
   sync('busy','cargando...');
@@ -317,7 +357,7 @@ async function loadAll(){
     [...OBerr,...OB].forEach(aplicarPendiente);
     ultimaCarga=Date.now();
     save();updSync();render();
-  }catch(e){updSync();if(!OB.length&&!OBerr.length)sync('err','sin conexión');console.error(e)}
+  }catch(e){updSync();if(authNecesaria)render();else if(!OB.length&&!OBerr.length)sync('err','sin conexión');console.error(e)}
 }
 
 function render(){
@@ -898,6 +938,11 @@ function rStock(){
     <table><thead><tr><th>Variante</th><th>Descuenta</th><th>Precio $</th><th></th></tr></thead><tbody>${vrRows||`<tr><td colspan="4" class="empty-row">Sin variantes</td></tr>`}</tbody></table>
   </div>
   ${sesion?.rol==='dueno'?`
+  <div class="sh">Este dispositivo</div>
+  <div class="blk">
+    <div style="font-size:11px;color:var(--tx2);font-family:var(--mo);margin-bottom:8px">Vinculado con la cuenta <b>${esc(auGet()?.email||'—')}</b></div>
+    <button class="btn" onclick="desvincularDispositivo()" style="width:100%;color:var(--rd)">Cerrar sesión de este dispositivo</button>
+  </div>
   <div class="sh">Cierre digital (Mercado Pago)</div>
   <div class="blk">
     <label style="display:flex;align-items:center;gap:8px;font-size:12px"><input type="checkbox" ${S.cfg.cierreDigital?'checked':''} onchange="setCierreDigital(this.checked)" style="width:auto"> Usar cierre digital al final del día</label>
@@ -2036,5 +2081,35 @@ async function exportBackup(){
 }
 
 /* ══ BOOT ══════════════════════════════════════════════════════ */
-if(sesion){document.getElementById('login-screen').style.display='none';document.getElementById('app-screen').style.display='block';initApp();}
-else{fetch(SB+'/rest/v1/usuarios',{headers:SBH}).then(r=>r.json()).then(us=>{if(us?.length)S.us=us;}).catch(()=>{});}
+function pantalla(id){['device-screen','login-screen','app-screen'].forEach(x=>{const el=document.getElementById(x);if(el)el.style.display=x===id?(x==='app-screen'?'block':'flex'):'none';});}
+function arrancar(){
+  if(!auGet()){pantalla('device-screen');const em=document.getElementById('dv-email');if(em&&!em.value)em.focus();return;}
+  if(sesion){pantalla('app-screen');if(appIniciada){flush();loadAll();}else initApp();return;}
+  pantalla('login-screen');
+  sbQ('usuarios','order=id').then(us=>{if(us?.length){S.us=us;LC.s('us',us);}}).catch(()=>{});
+}
+async function vincularDispositivo(){
+  const em=document.getElementById('dv-email'),pw=document.getElementById('dv-pass'),er=document.getElementById('dv-error'),bt=document.getElementById('dv-btn');
+  const email=(em.value||'').trim().toLowerCase(),pass=pw.value||'';
+  if(!email||!pass){er.textContent='Completá mail y contraseña';return;}
+  bt.disabled=true;er.style.color='var(--tx3)';er.textContent='Conectando...';
+  try{
+    const r=await fetch(SB+'/auth/v1/token?grant_type=password',{method:'POST',headers:{apikey:SK,'Content-Type':'application/json'},body:JSON.stringify({email,password:pass})});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok){er.style.color='';er.textContent=r.status===400?'Mail o contraseña incorrectos':'No se pudo ingresar ('+(j.msg||j.error_description||r.status)+')';return;}
+    auGuardar(j);pw.value='';er.textContent='';
+    toast('Dispositivo vinculado ✓');
+    arrancar();
+  }catch(e){er.style.color='';er.textContent='Sin conexión. Para vincular el dispositivo hace falta internet (una sola vez).';}
+  finally{bt.disabled=false;}
+}
+function pedirReingreso(){const em=document.getElementById('dv-email');if(em)em.value=auGet()?.email||em.value;LC.s('auth',null);arrancar();}
+async function desvincularDispositivo(){
+  if(sesion?.rol!=='dueno')return;
+  const pend=OB.length+OBerr.length;
+  if(!confirm('¿Cerrar la sesión de ESTE dispositivo?\n\nPara volver a usar la app acá vas a tener que ingresar el mail y la contraseña del local.'+(pend?`\n\nOJO: hay ${pend} registro(s) sin subir. Quedan guardados acá y suben cuando vuelvas a ingresar.`:'')))return;
+  const a=auGet();
+  if(a?.access_token)fetch(SB+'/auth/v1/logout',{method:'POST',headers:{apikey:SK,Authorization:'Bearer '+a.access_token}}).catch(()=>{});
+  LC.s('auth',null);sesion=null;SC.s('sesion',null);arrancar();
+}
+arrancar();

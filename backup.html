@@ -31,16 +31,30 @@
   <table id="tabla"></table>
 </div>
 <script>
-const SB='https://pfxvkvvzxpwobtynupgk.supabase.co';
+const SB=window.LPC_SB||'https://pfxvkvvzxpwobtynupgk.supabase.co';
 const SK='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBmeHZrdnZ6eHB3b2J0eW51cGdrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxNjM3NjIsImV4cCI6MjA5MDczOTc2Mn0.H2tqmv0T9npDmNW3Pid2qnUSze7EHvO1ky0-NQzmFIY';
 // Orden pensado para restaurar: primero las tablas "padre", después las que dependen de ellas
 const TABLAS=['usuarios','stock_groups','stock_variants','insumos','clientes_cc','cliente_precios','ventas','caja_movimientos','compras','compras_items','cortes','cortes_items','elaboraciones','elaboraciones_items','gastos','cierres','retiros_stock'];
 const PAGINA=1000;
 
+// Usa la sesión del dispositivo (la misma de la app): sin sesión la base no devuelve nada
+async function token(){
+  let a=null;try{a=JSON.parse(localStorage.getItem('lpc6_auth'));}catch{}
+  if(!a?.refresh_token)throw new Error('Este dispositivo no tiene sesión. Abrí la app, ingresá con la cuenta del local y volvé a esta página.');
+  if(a.expires_at-Date.now()<120000){
+    const r=await fetch(SB+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{apikey:SK,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:a.refresh_token})});
+    if(!r.ok)throw new Error('La sesión venció. Abrí la app y volvé a ingresar.');
+    const j=await r.json();
+    a={...a,access_token:j.access_token,refresh_token:j.refresh_token,expires_at:Date.now()+((j.expires_in||3600)*1000)};
+    localStorage.setItem('lpc6_auth',JSON.stringify(a));
+  }
+  return a.access_token;
+}
 async function bajarTabla(t){
   let filas=[],desde=0;
   while(true){
-    const r=await fetch(SB+'/rest/v1/'+t+'?select=*&order=id',{headers:{apikey:SK,Authorization:'Bearer '+SK,Range:desde+'-'+(desde+PAGINA-1),'Range-Unit':'items'}});
+    const tk=await token();
+    const r=await fetch(SB+'/rest/v1/'+t+'?select=*&order=id',{headers:{apikey:SK,Authorization:'Bearer '+tk,Range:desde+'-'+(desde+PAGINA-1),'Range-Unit':'items'}});
     if(r.status===404)return null; // la tabla todavía no existe (ej: antes de correr la migración)
     if(!r.ok)throw new Error(t+': '+await r.text());
     const lote=await r.json();

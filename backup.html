@@ -34,7 +34,7 @@
 const SB='https://pfxvkvvzxpwobtynupgk.supabase.co';
 const SK='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBmeHZrdnZ6eHB3b2J0eW51cGdrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxNjM3NjIsImV4cCI6MjA5MDczOTc2Mn0.H2tqmv0T9npDmNW3Pid2qnUSze7EHvO1ky0-NQzmFIY';
 // Orden pensado para restaurar: primero las tablas "padre", después las que dependen de ellas
-const TABLAS=['usuarios','stock_groups','stock_variants','insumos','clientes_cc','cliente_precios','ventas','caja_movimientos','compras','compras_items','cortes','cortes_items','elaboraciones','elaboraciones_items','gastos','cierres'];
+const TABLAS=['usuarios','stock_groups','stock_variants','insumos','clientes_cc','cliente_precios','ventas','caja_movimientos','compras','compras_items','cortes','cortes_items','elaboraciones','elaboraciones_items','gastos','cierres','retiros_stock'];
 const PAGINA=1000;
 
 async function bajarTabla(t){

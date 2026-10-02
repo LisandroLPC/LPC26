@@ -1,4 +1,4 @@
-/* LOS POLLOS CUÑADOS v8.1 */
+/* LOS POLLOS CUÑADOS v8.2 */
 const SB=window.LPC_SB||'https://pfxvkvvzxpwobtynupgk.supabase.co';
 const SK='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBmeHZrdnZ6eHB3b2J0eW51cGdrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxNjM3NjIsImV4cCI6MjA5MDczOTc2Mn0.H2tqmv0T9npDmNW3Pid2qnUSze7EHvO1ky0-NQzmFIY';
 const SBH={'apikey':SK,'Authorization':'Bearer '+SK,'Content-Type':'application/json','Prefer':'return=minimal'};
@@ -77,7 +77,7 @@ function bannerSync(){
 function aplicarPendiente(op){
   const porId=(arr,row)=>{const i=arr.findIndex(x=>x.id===row.id);if(i>=0)arr[i]={...arr[i],...row};else arr.push({...row});};
   const porDia=(map,row)=>{const d=row.day;if(!map[d])map[d]=[];porId(map[d],row);};
-  const lista={stock_groups:'sg',stock_variants:'vr',compras:'co',compras_items:'coi',cortes:'ct',cortes_items:'cti',elaboraciones:'el',elaboraciones_items:'eli',insumos:'ins',clientes_cc:'ccl',cliente_precios:'cp',usuarios:'us'};
+  const lista={stock_groups:'sg',stock_variants:'vr',compras:'co',compras_items:'coi',cortes:'ct',cortes_items:'cti',elaboraciones:'el',elaboraciones_items:'eli',insumos:'ins',clientes_cc:'ccl',cliente_precios:'cp',usuarios:'us',retiros_stock:'rt'};
   const dias={ventas:'ve',gastos:'ga',caja_movimientos:'caja'};
   if(op.k==='up'){
     const rows=Array.isArray(op.d)?op.d:[op.d];
@@ -105,6 +105,7 @@ let S={
   cierres:LC.g('cierres')||{},
   ccl:LC.g('ccl')||[],
   cp:LC.g('cp')||[],
+  rt:LC.g('rt')||[],
   cfg:LC.g('cfg')||{},
 };
 // Merge defaults: completar los campos que falten en cfg
@@ -221,7 +222,7 @@ function sgV(){return S.sg.filter(g=>g.tipo==='venta'||!g.tipo)}
 function sgP(){return S.sg.filter(g=>g.tipo==='produccion')}
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),2400)}
 function sync(s,l){const d=document.getElementById('sdot'),lb=document.getElementById('slbl');if(d){d.className='sdot '+s;lb.textContent=l}}
-function save(){LC.s('us',S.us);LC.s('sg',S.sg);LC.s('vr',S.vr);LC.s('ve',S.ve);LC.s('caja',S.caja);LC.s('co',S.co);LC.s('coi',S.coi);LC.s('ct',S.ct);LC.s('cti',S.cti);LC.s('el',S.el);LC.s('eli',S.eli);LC.s('ga',S.ga);LC.s('ins',S.ins);LC.s('cierres',S.cierres);LC.s('ccl',S.ccl);LC.s('cp',S.cp);LC.s('cfg',S.cfg);}
+function save(){LC.s('us',S.us);LC.s('sg',S.sg);LC.s('vr',S.vr);LC.s('ve',S.ve);LC.s('caja',S.caja);LC.s('co',S.co);LC.s('coi',S.coi);LC.s('ct',S.ct);LC.s('cti',S.cti);LC.s('el',S.el);LC.s('eli',S.eli);LC.s('ga',S.ga);LC.s('ins',S.ins);LC.s('cierres',S.cierres);LC.s('ccl',S.ccl);LC.s('cp',S.cp);LC.s('rt',S.rt);LC.s('cfg',S.cfg);}
 function toggleDetail(id){const el=document.getElementById(id);if(el)el.style.display=el.style.display==='none'?'block':'none';}
 // Gastos que salen del cajón del día (no los de compras ni los del local)
 function esGastoCaja(g,compraGastoIds){return!compraGastoIds.has(g.id)&&!g.fuera_caja;}
@@ -281,7 +282,7 @@ async function loadAll(){
   sync('busy','cargando...');
   try{
     await flush(); // primero subir lo pendiente
-    const[us,sg,vr,ve,caja,co,coi,ct,cti,el,eli,ga,ins,cierresArr,ccl,cp]=await Promise.all([
+    const[us,sg,vr,ve,caja,co,coi,ct,cti,el,eli,ga,ins,cierresArr,ccl,cp,rt]=await Promise.all([
       sbQ('usuarios','order=id'),sbQ('stock_groups','order=name'),sbQ('stock_variants','order=name'),
       sbQ('ventas','order=created_at,id'),sbQ('caja_movimientos','order=created_at,id'),
       sbQ('compras','order=created_at,id'),sbQ('compras_items','order=created_at,id'),
@@ -291,9 +292,10 @@ async function loadAll(){
       sbQ('cierres','order=day'),
       sbQ('clientes_cc','order=nombre'),
       sbQ('cliente_precios','order=id').catch(()=>[]), // tabla nueva: si todavía no se corrió la migración, sigue funcionando
+      sbQ('retiros_stock','order=created_at,id').catch(()=>null), // idem: tabla nueva de retiros
     ]);
     S.us=us;S.sg=sg;S.vr=vr;S.co=co;S.coi=coi;S.ct=ct;S.cti=cti;S.el=el;S.eli=eli;
-    S.ccl=ccl||[];S.cp=cp||[];
+    S.ccl=ccl||[];S.cp=cp||[];if(rt)S.rt=rt;
     S.ins=ins.map(i=>({...i,costUnit:i.cost_unit||0,stock_qty:i.stock_qty||0}));
     const cm2={};
     (cierresArr||[]).forEach(c=>{
@@ -327,7 +329,7 @@ function render(){
   const c=document.getElementById('content');
   if(tab==='caja')c.innerHTML=bannerSync()+rCaja();
   else if(tab==='stock')c.innerHTML=bannerSync()+rStock();
-  else if(tab==='prod'){c.innerHTML=bannerSync()+rProd();if(prodTab==='corte')renderCorteItems();else renderElabItems();}
+  else if(tab==='prod'){c.innerHTML=bannerSync()+rProd();if(prodTab==='corte')renderCorteItems();else if(prodTab==='elab')renderElabItems();}
   else if(tab==='compras'){c.innerHTML=bannerSync()+rCompras();if(comprasTab==='mercaderia')renderCompraItems();}
   else if(tab==='cc')c.innerHTML=bannerSync()+rCC();
   else if(tab==='gastos')c.innerHTML=bannerSync()+rGastos();
@@ -1017,8 +1019,9 @@ function rProd(){
   return`<div class="prod-tabs">
     <button class="prod-tab ${prodTab==='corte'?'active':''}" onclick="setProdTab('corte')">✂ Corte — Ingreso stock</button>
     <button class="prod-tab ${prodTab==='elab'?'active':''}" onclick="setProdTab('elab')">🍳 Elaboración</button>
+    <button class="prod-tab ${prodTab==='retiros'?'active':''}" onclick="setProdTab('retiros')">🏠 Retiros</button>
   </div>
-  ${prodTab==='corte'?rCorte():rElab()}`;
+  ${prodTab==='corte'?rCorte():prodTab==='elab'?rElab():rRetiros()}`;
 }
 function setProdTab(t){prodTab=t;render();}
 
@@ -1220,6 +1223,66 @@ function addIns(){const n=document.getElementById('ins-n')?.value.trim(),u=docum
 function updInsStock(id,v){const i=S.ins.find(x=>x.id===id);if(!i)return;i.stock_qty=parseFloat(v)||0;save();toast('Stock corregido ✓');sbUp('insumos',insRow(i));}
 function updIns(id,v){const i=S.ins.find(x=>x.id===id);if(!i)return;i.costUnit=parseFloat(v)||0;i.cost_unit=i.costUnit;save();toast('Costo actualizado ✓');sbUp('insumos',insRow(i));}
 function delIns(id){if(!confirm('¿Eliminar este insumo?'))return;S.ins=S.ins.filter(x=>x.id!==id);save();render();sbDel('insumos',id);}
+
+/* ══ RETIROS EN MERCADERÍA (consumo personal del dueño) ═══════════
+   Baja stock y NO toca caja, ventas ni Resultado del local.
+   Se muestran aparte para saber cuánto representa lo que se lleva el dueño.
+   El costo ya está dentro de las compras del mes: por eso no se resta de nuevo. */
+function retirosPeriodo(matchDay){
+  const L=(S.rt||[]).filter(r=>matchDay(String(r.day).slice(0,10)));
+  const porG={};
+  L.forEach(r=>{const g=S.sg.find(x=>x.id===r.group_id),n=g?.name||r.nombre||'—';if(!porG[n])porG[n]={qty:0,unit:r.unit||g?.unit||'kg',costo:0,venta:0};porG[n].qty+=+r.stock_used||0;porG[n].costo+=+r.costo_total||0;porG[n].venta+=+r.valor_venta||0;});
+  return{L,n:L.length,costo:L.reduce((s,r)=>s+(+r.costo_total||0),0),venta:L.reduce((s,r)=>s+(+r.valor_venta||0),0),porG};
+}
+// Bloque para Reportes (Mes y Financiero): informativo, no modifica ningún número del local
+function blkRetiros(ym,resultado){
+  const R=retirosPeriodo(d=>d.startsWith(ym));
+  if(!R.n)return'';
+  const filas=Object.entries(R.porG).sort((a,b)=>b[1].costo-a[1].costo).map(([n,d])=>`<tr><td>${esc(n)}</td><td style="font-family:var(--mo)">${fQ(d.qty,d.unit)}</td><td style="font-family:var(--mo)">${$m(d.costo)}</td><td style="font-family:var(--mo);color:var(--tx2)">${$m(d.venta)}</td></tr>`).join('');
+  const pct=resultado>0?` · ${Math.round(R.costo/resultado*100)}% del resultado`:'';
+  return`<div class="blk"><div class="bt">🏠 Mis retiros en mercadería — ${fM(ym)}</div>
+    <div class="kpis t3" style="margin-bottom:6px"><div class="kc"><div class="kl">A costo</div><div class="kv" style="font-size:14px">${$m(R.costo)}</div></div><div class="kc"><div class="kl">A precio de venta</div><div class="kv" style="font-size:14px;color:var(--tx2)">${$m(R.venta)}</div></div><div class="kc"><div class="kl">Retiros</div><div class="kv" style="font-size:14px">${R.n}</div></div></div>
+    <div style="font-size:10px;color:var(--tx3);font-family:var(--mo);margin-bottom:6px">Aparte: no cambia el Resultado del local (el costo ya está en las compras)${pct}</div>
+    <table><thead><tr><th>Producto</th><th>Cant.</th><th>Costo</th><th>Venta</th></tr></thead><tbody>${filas}</tbody></table></div>`;
+}
+function rRetiros(){
+  const ym=day.slice(0,7);
+  const gIds=new Set(sgV().map(g=>g.id));
+  const opts=S.vr.filter(v=>gIds.has(v.group_id)).map(v=>{const g=S.sg.find(x=>x.id===v.group_id);return{v,g,lbl:`${g.name} — ${v.name}`};}).sort((a,b)=>a.lbl.localeCompare(b.lbl))
+    .map(({v,g,lbl})=>`<option value="${v.id}">${esc(lbl)} (${$m(v.price)} · costo ${$m((g.cost_unit||0)*(v.qty_per_unit||1))})</option>`).join('');
+  const hoy=(S.rt||[]).filter(r=>String(r.day).slice(0,10)===day).sort((a,b)=>String(a.created_at||a.time||'').localeCompare(String(b.created_at||b.time||'')));
+  const cards=hoy.map(r=>`<div class="pvi"><div><div class="pvn">${esc(r.nombre)}</div><div class="pvd">${r.time||''} · −${fQ(r.stock_used,r.unit)} · costo ${$m(r.costo_total)} · venta ${$m(r.valor_venta)}${r.note?' · '+esc(r.note):''}</div></div><button class="dbtn" onclick="delRetiro('${r.id}')">✕</button></div>`).join('')||`<div style="font-size:11px;color:var(--tx3);font-family:var(--mo);padding:4px 0">Sin retiros este día</div>`;
+  const M=retirosPeriodo(d=>d.startsWith(ym));
+  return`<div class="info-box amber">🏠 Lo que te llevás para tu casa. <b>Baja el stock</b> pero <b>no toca la caja, las ventas ni el Resultado</b> del local. Lo ves aparte en Reportes.</div>
+  <div class="blk"><div class="bt">Nuevo retiro</div>
+    <div class="fr"><div class="fl" style="flex:3"><label>Producto</label><select id="rt-var">${opts||'<option value="">Sin variantes</option>'}</select></div><div class="fl" style="max-width:80px"><label>Cant.</label><input type="number" id="rt-qty" placeholder="0" min="0.001" step="0.001"></div></div>
+    <div class="fr"><div class="fl"><label>Nota (opcional)</label><input type="text" id="rt-note" placeholder="Ej: cena domingo"></div></div>
+    <button class="btn btnp" onclick="saveRetiro()" style="width:100%;margin-top:8px">✓ Guardar retiro</button>
+  </div>
+  <div class="sh">Retiros del día</div>${cards}
+  <div class="sh">Acumulado ${fM(ym)}</div>
+  <div class="kpis t3"><div class="kc"><div class="kl">A costo</div><div class="kv" style="font-size:14px">${$m(M.costo)}</div></div><div class="kc"><div class="kl">A precio de venta</div><div class="kv" style="font-size:14px;color:var(--tx2)">${$m(M.venta)}</div></div><div class="kc"><div class="kl">Retiros</div><div class="kv" style="font-size:14px">${M.n}</div></div></div>`;
+}
+function saveRetiro(){
+  const vid=document.getElementById('rt-var')?.value,qty=parseFloat(document.getElementById('rt-qty')?.value)||0,note=document.getElementById('rt-note')?.value.trim();
+  const vr=S.vr.find(x=>x.id===vid),g=vr&&S.sg.find(x=>x.id===vr.group_id);
+  if(!vr||!g)return alert('Elegí un producto');
+  if(!(qty>0))return alert('Cargá la cantidad');
+  const stockUsed=qty*(+vr.qty_per_unit||1),cu=+g.cost_unit||0;
+  const row={id:uid(),day,group_id:g.id,variant_id:vr.id,nombre:`${g.name} — ${vr.name}`,qty,stock_used:stockUsed,unit:g.unit||'kg',costo_unit:cu,costo_total:stockUsed*cu,valor_venta:qty*(+vr.price||0),motivo:'consumo_personal',note:note||null,usuario:sesion?.nombre||'—',time:arTime()};
+  g.stock_qty=(g.stock_qty||0)-stockUsed;
+  S.rt.push(row);save();render();
+  sbUp('retiros_stock',row);subirGrupos([g.id]);
+  toast('Retiro guardado ✓');
+}
+function delRetiro(id){
+  if(sesion?.rol!=='dueno')return alert('Solo el Dueño puede eliminar. Pedile que ingrese con su PIN para borrar esto.');
+  const r=S.rt.find(x=>x.id===id);if(!r)return;
+  if(!confirm('¿Eliminar este retiro? El stock vuelve a sumar.'))return;
+  const g=S.sg.find(x=>x.id===r.group_id);if(g)g.stock_qty=(g.stock_qty||0)+(+r.stock_used||0);
+  S.rt=S.rt.filter(x=>x.id!==id);save();render();
+  sbDel('retiros_stock',id);if(g)subirGrupos([g.id]);
+}
 
 /* ══ COMPRAS ══════════════════════════════════════════════════════ */
 /* ══ CLIENTES Y CUENTAS CORRIENTES ═══════════════════════════════
@@ -1782,6 +1845,7 @@ function rRepMes(mthTabs){
     <div class="kc"><div class="kl">Efectivo total</div><div class="kv g" style="font-size:14px">${$m(tvEf+ingEf-egEf)}</div></div>
     <div class="kc"><div class="kl">Digital total</div><div class="kv b" style="font-size:14px">${$m(tvTr+ingTr-egTr)}</div></div>
   </div>
+  ${blkRetiros(rMonth,resultado)}
   <div class="blk"><div class="bt">Ventas diarias — ${fM(rMonth)}</div><div class="ch-w"><canvas id="cM"></canvas></div></div>
   <button class="btn btng" onclick="exportExcel()" style="width:100%;margin-top:6px">⬇ Exportar todo a Excel</button>`;
 }
@@ -1892,6 +1956,7 @@ function rRepFin(mthTabs){
   <div class="kpis t3"><div class="kc hi"><div class="kl">Ingresos totales</div><div class="kv a">${$m(ingresoTotal)}</div><div class="kh">ventas + extra</div></div><div class="kc"><div class="kl">Gastos totales</div><div class="kv r">${$m(tGastoTotal)}</div><div class="kh" style="font-size:9px;color:var(--tx3)">caja ${$m(tg-tgLocal)} · local ${$m(tgLocal)} · comp. ${$m(tCompras)}</div></div><div class="kc"><div class="kl">Resultado</div><div class="kv ${resultado>=0?'g':'r'}">${$m(resultado)}</div></div></div>
   <div class="kpis t3"><div class="kc"><div class="kl">Margen</div><div class="kv" style="color:${margenCol}">${margen}%</div></div><div class="kc"><div class="kl">Efectivo total</div><div class="kv g" style="font-size:14px">${$m(efectivoTotal)}</div></div><div class="kc"><div class="kl">Digital total</div><div class="kv b" style="font-size:14px">${$m(digitalTotal)}</div></div></div>
   ${ingExtra>0||egTotal>0?`<div class="blk"><div class="bt">Movimientos de caja del período</div><div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--br)"><span style="font-size:11px;color:var(--tx2)">Ingresos extra</span><span style="font-family:var(--mo);color:var(--gn)">${$m(ingExtra)}</span></div><div style="display:flex;justify-content:space-between;padding:5px 0"><span style="font-size:11px;color:var(--tx2)">Egresos extra</span><span style="font-family:var(--mo);color:var(--rd)">${$m(egTotal)}</span></div></div>`:''}
+  ${blkRetiros(rMonth,resultado)}
   <div class="tbk"><div class="tt">Gastos operativos por categoría</div><table><thead><tr><th>Categoría</th><th>Monto</th><th>%</th></tr></thead><tbody>${catRows}</tbody></table></div>
   ${diasCerrados>0?`<div class="blk"><div class="bt">Diferencias de caja del mes (faltante/sobrante)</div><div style="display:flex;justify-content:space-between;padding:5px 0"><span style="font-size:11px;color:var(--tx2)">Acumulado (${diasCerrados} día${diasCerrados===1?'':'s'} cerrado${diasCerrados===1?'':'s'})</span><span style="font-family:var(--mo);font-weight:600;color:${totalDif>=0?'var(--gn)':'var(--rd)'}">${totalDif>=0?'+':''}${$m(totalDif)}</span></div></div><div class="tbk"><table><thead><tr><th>Día</th><th>Diferencia</th></tr></thead><tbody>${difRows}</tbody></table></div>`:''}
   ${evoRows}
@@ -1927,9 +1992,11 @@ function exportExcel(){
   const cja=[['Fecha','Hora','Tipo','Descripción','Método','Monto','Cliente']];Object.entries(S.caja).sort(([a],[b])=>a.localeCompare(b)).forEach(([d,ms])=>ms.forEach(m=>cja.push([fDL(d),m.time||'',m.tipo,m.descripcion,m.metodo,m.monto,nombreCliente(m.cliente_cc_id)])));
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(cja),'Caja');
   // Resumen: los gastos totales incluyen compras, igual que el Resultado
-  const rm=[['Mes','Ventas (sin Cta.Cte.)','Cobros Cta.Cte.','Efectivo','Transferencias','Gastos de caja','Gastos del local','Compras','Gastos totales','Resultado']];
-  getMths().forEach(ym=>{const d=mData(ym);rm.push([fM(ym),d.tv,d.cobrosCC,d.tvEf,d.tvTr,d.tg-d.tgLocal,d.tgLocal,d.tCompras,d.tg+d.tCompras,d.resultado]);});
+  const rm=[['Mes','Ventas (sin Cta.Cte.)','Cobros Cta.Cte.','Efectivo','Transferencias','Gastos de caja','Gastos del local','Compras','Gastos totales','Resultado','Mis retiros (costo, aparte)']];
+  getMths().forEach(ym=>{const d=mData(ym);rm.push([fM(ym),d.tv,d.cobrosCC,d.tvEf,d.tvTr,d.tg-d.tgLocal,d.tgLocal,d.tCompras,d.tg+d.tCompras,d.resultado,retirosPeriodo(x=>x.startsWith(ym)).costo]);});
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rm),'Resumen mensual');
+  const rtx=[['Fecha','Hora','Producto','Cantidad','Stock usado','Unidad','Costo/u','Costo total','Valor venta','Nota']];(S.rt||[]).slice().sort((a,b)=>String(a.day).localeCompare(String(b.day))).forEach(r=>rtx.push([fDL(String(r.day).slice(0,10)),r.time||'',r.nombre,r.qty,r.stock_used,r.unit||'',r.costo_unit||0,r.costo_total||0,r.valor_venta||0,r.note||'']));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rtx),'Mis retiros');
   const sta=[['Nombre','Tipo','Unidad','Stock actual','Costo/u']];S.sg.forEach(g=>sta.push([g.name,g.tipo||'venta',g.unit||'kg',g.stock_qty||0,g.cost_unit||0]));
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(sta),'Stock');
   const cli=[['Cliente','Teléfono','Saldo Cta.Cte.','Última compra','Kg últimos 30 días']];S.ccl.forEach(c=>{const r=resumenCliente(c.id);cli.push([c.nombre,c.telefono||'',saldoClienteCC(c.id),r.ult?fDL(r.ult):'',+r.kg30.toFixed(2)]);});
@@ -1940,13 +2007,13 @@ function exportExcel(){
 /* ══ BACKUP ══════════════════════════════════════════════════════
    Baja TODAS las tablas directo de Supabase a un archivo .json.
    Es la copia de seguridad: guardala fuera del celular (Drive, mail).    */
-const TABLAS_BACKUP=['usuarios','stock_groups','stock_variants','insumos','clientes_cc','cliente_precios','ventas','caja_movimientos','compras','compras_items','cortes','cortes_items','elaboraciones','elaboraciones_items','gastos','cierres'];
+const TABLAS_BACKUP=['usuarios','stock_groups','stock_variants','insumos','clientes_cc','cliente_precios','ventas','caja_movimientos','compras','compras_items','cortes','cortes_items','elaboraciones','elaboraciones_items','gastos','cierres','retiros_stock'];
 async function exportBackup(){
   if(OB.length&&!confirm(`Hay ${OB.length} registro(s) que todavía no subieron. El backup baja lo que está en la nube. ¿Seguir igual?`))return;
   toast('Bajando backup...');
   try{
     const datos={generado:new Date().toISOString(),proyecto:'pfxvkvvzxpwobtynupgk',tablas:{}};
-    for(const t of TABLAS_BACKUP){try{datos.tablas[t]=await sbQ(t,'select=*&order=id');}catch(e){if(t!=='cliente_precios')throw e;}}
+    for(const t of TABLAS_BACKUP){try{datos.tablas[t]=await sbQ(t,'select=*&order=id');}catch(e){if(t!=='cliente_precios'&&t!=='retiros_stock')throw e;}}
     const a=document.createElement('a');
     a.href=URL.createObjectURL(new Blob([JSON.stringify(datos)],{type:'application/json'}));
     a.download=`LPC_backup_${datos.generado.slice(0,16).replace(/[-:T]/g,'')}.json`;
